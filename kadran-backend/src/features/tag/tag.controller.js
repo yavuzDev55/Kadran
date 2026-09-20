@@ -9,7 +9,8 @@ import {
 
 export const getTags = async (req, res, next) => {
   try {
-    const tags = await getTagsService(req.user.id);
+    const { filter } = req.query;
+    const tags = await getTagsService(req.user.id, filter);
     res.json({ tags });
   } catch (error) {
     next(error);

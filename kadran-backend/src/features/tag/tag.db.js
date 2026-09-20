@@ -2,9 +2,15 @@
 
 import prisma from '../../config/database.js';
 
-export const findTagsByUser = (userId) => {
+export const findTagsByUser = (userId, filter = null) => {
+  const where = { userId };
+  
+  if (filter) {
+    where.name = { contains: filter.toLowerCase() };
+  }
+  
   return prisma.tag.findMany({
-    where: { userId },
+    where,
     orderBy: { name: 'asc' },
   });
 };

@@ -10,8 +10,8 @@ import {
 } from './tag.db.js';
 import { AuthorizationError, NotFoundError } from '../../shared/utils/customErrors.js';
 
-export const getTagsService = (userId) => {
-  return findTagsByUser(userId);
+export const getTagsService = (userId, filter = null) => {
+  return findTagsByUser(userId, filter);
 };
 
 export const addTagsToTaskService = async (userId, taskId, tagNames) => {

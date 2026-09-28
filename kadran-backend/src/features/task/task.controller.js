@@ -1,28 +1,15 @@
 // src/features/task/task.controller.js
 
-import {
-  getTasksService,
-  createTaskService,
-  updateTaskService,
-  deleteTaskService,
-  toggleTaskService,
-  addTagsToTaskService,
-  removeTagFromTaskService,
-} from './task.service.js';
-
-export const getTasks = async (req, res, next) => {
-  try {
-    const result = await getTasksService(req.user.id, req.query);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-};
+import * as taskService from './task.service.js';
 
 export const createTask = async (req, res, next) => {
   try {
-    const task = await createTaskService(req.user.id, req.body);
-    res.status(201).json(task);
+    const { task, warnings } = await taskService.createTask(
+      req.user.id,
+      req.body,
+      req.taskWarnings || []
+    );
+    res.status(201).json({ success: true, data: task, warnings });
   } catch (error) {
     next(error);
   }
@@ -30,8 +17,13 @@ export const createTask = async (req, res, next) => {
 
 export const updateTask = async (req, res, next) => {
   try {
-    const task = await updateTaskService(req.user.id, req.params.id, req.body);
-    res.json(task);
+    const { task, warnings } = await taskService.updateTask(
+      req.user.id,
+      Number(req.params.id),
+      req.body,
+      req.taskWarnings || []
+    );
+    res.status(200).json({ success: true, data: task, warnings });
   } catch (error) {
     next(error);
   }
@@ -39,7 +31,7 @@ export const updateTask = async (req, res, next) => {
 
 export const deleteTask = async (req, res, next) => {
   try {
-    await deleteTaskService(req.user.id, req.params.id);
+    await taskService.deleteTask(req.user.id, Number(req.params.id));
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -48,26 +40,39 @@ export const deleteTask = async (req, res, next) => {
 
 export const toggleTask = async (req, res, next) => {
   try {
-    const task = await toggleTaskService(req.user.id, req.params.id);
-    res.json(task);
+    const task = await taskService.toggleTask(req.user.id, Number(req.params.id));
+    res.status(200).json({ success: true, data: task });
   } catch (error) {
     next(error);
   }
 };
 
-export const addTagsToTask = async (req, res, next) => {
+export const listTasks = async (req, res, next) => {
   try {
-    const task = await addTagsToTaskService(req.user.id, req.params.id, req.body.tagNames);
-    res.status(201).json(task);
+    const { tasks, total, hasMore } = await taskService.listTasks(req.user.id, req.query);
+    res.status(200).json({ success: true, data: tasks, meta: { total, hasMore } });
   } catch (error) {
     next(error);
   }
 };
 
-export const removeTagFromTask = async (req, res, next) => {
+export const addTag = async (req, res, next) => {
   try {
-    await removeTagFromTaskService(req.user.id, req.params.id, req.params.tagId);
-    res.status(204).send();
+    const task = await taskService.addTagToTask(req.user.id, Number(req.params.id), req.body.name);
+    res.status(200).json({ success: true, data: task });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeTag = async (req, res, next) => {
+  try {
+    const task = await taskService.removeTagFromTask(
+      req.user.id,
+      Number(req.params.id),
+      Number(req.params.tagId)
+    );
+    res.status(200).json({ success: true, data: task });
   } catch (error) {
     next(error);
   }

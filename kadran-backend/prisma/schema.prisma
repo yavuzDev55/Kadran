@@ -1,3 +1,7 @@
+// ============================================================
+// FINAL v3 SCHEMA — this is the target/end state.
+// ============================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,10 +12,16 @@ datasource db {
 }
 
 enum TaskType {
-  DERS
-  SINAV
-  ODEV
-  KISISEL
+  COURSE
+  EXAM
+  HOMEWORK
+  CUSTOM
+}
+
+enum TimeType {
+  TIMED
+  DEADLINE
+  DATE_RANGE
 }
 
 enum Priority {
@@ -26,41 +36,19 @@ enum RecurrencePattern {
   MONTHLY
 }
 
-enum TimeType {
-  HOURLY
-  ALLDAY
-  REMINDER
-}
-
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  password  String
-  timeZone  String    @default("Europe/Istanbul")
-
-  categories Category[]
-  tasks      Task[]
-  tags       Tag[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  @@map("users")
-}
-
-model Category {
-  id    Int    @id @default(autoincrement())
-  name  String
-  color String
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  timeZone String @default("Europe/Istanbul")
 
   tasks Task[]
+  tags  Tag[]
 
-  @@unique([userId, name])
-  @@index([userId])
-  @@map("categories")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
 }
 
 model Tag {
@@ -78,22 +66,34 @@ model Tag {
 }
 
 model Task {
-  id          Int       @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   title       String
   description String?
 
-  type       TaskType
-  categoryId Int
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
+  type     TaskType
   timeType TimeType
-  date     DateTime
 
-  startTime     String?
-  endTime       String?
-  reminderTime  String?
+  // Shared by TIMED / DEADLINE; null for DATE_RANGE
+  date DateTime?
 
-  isRecurring       Boolean             @default(false)
+  // TIMED fields (unused when isFlexibleSchedule is true, see schedules)
+  startTime String?
+  endTime   String?
+
+  // DATE_RANGE fields
+  rangeStartDate DateTime?
+  rangeStartTime String?
+  rangeEndDate   DateTime?
+  rangeEndTime   String?
+
+  // Flexible weekly schedule — out of scope in the official v3.0 doc
+  // (§11.2), included at the user's request.
+  isFlexibleSchedule Boolean        @default(false)
+  schedulePattern    String?
+  schedules          TaskSchedule[]
+
+  // Recurrence (unchanged from v2)
+  isRecurring       Boolean            @default(false)
   recurrencePattern RecurrencePattern?
   recurrenceStart   DateTime?
   recurrenceEnd     DateTime?
@@ -104,17 +104,31 @@ model Task {
   isCompleted Boolean  @default(false)
 
   userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  tags TaskTag[]
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags   TaskTag[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
-  @@index([categoryId])
   @@index([date])
+  @@index([rangeStartDate])
+  @@index([rangeEndDate])
   @@map("tasks")
+}
+
+model TaskSchedule {
+  id        Int    @id @default(autoincrement())
+  dayOfWeek String // MONDAY..SUNDAY
+  startTime String // HH:MM
+  endTime   String // HH:MM
+
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dayOfWeek])
+  @@index([taskId])
+  @@map("task_schedules")
 }
 
 model TaskTag {
@@ -131,3 +145,13 @@ model TaskTag {
   @@index([tagId])
   @@map("task_tags")
 }
+
+// ============================================================
+// REMOVED in v3 (still present in your current schema):
+//   model Category { id, name, color, userId }
+//   Task.categoryId Int  (NOT NULL foreign key -> Category)
+//   Task.reminderTime String?
+//   TaskType.KISISEL (replaced by CUSTOM)
+//   TaskType.DERS / SINAV / ODEV (renamed to COURSE / EXAM / HOMEWORK)
+//   TimeType.HOURLY, TimeType.ALLDAY, TimeType.REMINDER
+// ============================================================

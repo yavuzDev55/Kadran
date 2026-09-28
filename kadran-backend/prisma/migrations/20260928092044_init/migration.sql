@@ -1,14 +1,14 @@
 -- CreateEnum
-CREATE TYPE "TaskType" AS ENUM ('DERS', 'SINAV', 'ODEV', 'KISISEL');
+CREATE TYPE "TaskType" AS ENUM ('COURSE', 'EXAM', 'HOMEWORK', 'CUSTOM');
+
+-- CreateEnum
+CREATE TYPE "TimeType" AS ENUM ('TIMED', 'DEADLINE', 'DATE_RANGE');
 
 -- CreateEnum
 CREATE TYPE "Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH');
 
 -- CreateEnum
 CREATE TYPE "RecurrencePattern" AS ENUM ('DAILY', 'WEEKLY', 'MONTHLY');
-
--- CreateEnum
-CREATE TYPE "TimeType" AS ENUM ('HOURLY', 'ALLDAY', 'REMINDER');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -20,16 +20,6 @@ CREATE TABLE "users" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "categories" (
-    "id" SERIAL NOT NULL,
-    "name" TEXT NOT NULL,
-    "color" TEXT NOT NULL,
-    "userId" INTEGER NOT NULL,
-
-    CONSTRAINT "categories_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -47,12 +37,16 @@ CREATE TABLE "tasks" (
     "title" TEXT NOT NULL,
     "description" TEXT,
     "type" "TaskType" NOT NULL,
-    "categoryId" INTEGER NOT NULL,
     "timeType" "TimeType" NOT NULL,
-    "date" TIMESTAMP(3) NOT NULL,
+    "date" TIMESTAMP(3),
     "startTime" TEXT,
     "endTime" TEXT,
-    "reminderTime" TEXT,
+    "rangeStartDate" TIMESTAMP(3),
+    "rangeStartTime" TEXT,
+    "rangeEndDate" TIMESTAMP(3),
+    "rangeEndTime" TEXT,
+    "isFlexibleSchedule" BOOLEAN NOT NULL DEFAULT false,
+    "schedulePattern" TEXT,
     "isRecurring" BOOLEAN NOT NULL DEFAULT false,
     "recurrencePattern" "RecurrencePattern",
     "recurrenceStart" TIMESTAMP(3),
@@ -69,6 +63,17 @@ CREATE TABLE "tasks" (
 );
 
 -- CreateTable
+CREATE TABLE "task_schedules" (
+    "id" SERIAL NOT NULL,
+    "dayOfWeek" TEXT NOT NULL,
+    "startTime" TEXT NOT NULL,
+    "endTime" TEXT NOT NULL,
+    "taskId" INTEGER NOT NULL,
+
+    CONSTRAINT "task_schedules_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "task_tags" (
     "id" SERIAL NOT NULL,
     "taskId" INTEGER NOT NULL,
@@ -81,12 +86,6 @@ CREATE TABLE "task_tags" (
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
-CREATE INDEX "categories_userId_idx" ON "categories"("userId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "categories_userId_name_key" ON "categories"("userId", "name");
-
--- CreateIndex
 CREATE INDEX "tags_userId_idx" ON "tags"("userId");
 
 -- CreateIndex
@@ -96,10 +95,19 @@ CREATE UNIQUE INDEX "tags_userId_name_key" ON "tags"("userId", "name");
 CREATE INDEX "tasks_userId_idx" ON "tasks"("userId");
 
 -- CreateIndex
-CREATE INDEX "tasks_categoryId_idx" ON "tasks"("categoryId");
+CREATE INDEX "tasks_date_idx" ON "tasks"("date");
 
 -- CreateIndex
-CREATE INDEX "tasks_date_idx" ON "tasks"("date");
+CREATE INDEX "tasks_rangeStartDate_idx" ON "tasks"("rangeStartDate");
+
+-- CreateIndex
+CREATE INDEX "tasks_rangeEndDate_idx" ON "tasks"("rangeEndDate");
+
+-- CreateIndex
+CREATE INDEX "task_schedules_taskId_idx" ON "task_schedules"("taskId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "task_schedules_taskId_dayOfWeek_key" ON "task_schedules"("taskId", "dayOfWeek");
 
 -- CreateIndex
 CREATE INDEX "task_tags_taskId_idx" ON "task_tags"("taskId");
@@ -111,16 +119,13 @@ CREATE INDEX "task_tags_tagId_idx" ON "task_tags"("tagId");
 CREATE UNIQUE INDEX "task_tags_taskId_tagId_key" ON "task_tags"("taskId", "tagId");
 
 -- AddForeignKey
-ALTER TABLE "categories" ADD CONSTRAINT "categories_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "tags" ADD CONSTRAINT "tags_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "tasks" ADD CONSTRAINT "tasks_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "categories"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "tasks" ADD CONSTRAINT "tasks_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "tasks" ADD CONSTRAINT "tasks_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "task_schedules" ADD CONSTRAINT "task_schedules_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "task_tags" ADD CONSTRAINT "task_tags_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;

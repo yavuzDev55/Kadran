@@ -8,7 +8,6 @@ import { authMiddleware } from './shared/middlewares/auth.middleware.js';
 import { errorHandler } from './shared/middlewares/errorHandler.middleware.js';
 
 import authRouter from './features/auth/auth.router.js';
-import categoryRouter from './features/category/category.router.js';
 import tagRouter from './features/tag/tag.router.js';
 import taskRouter from './features/task/task.router.js';
 
@@ -33,7 +32,6 @@ app.use('/auth', authRouter);
 // ============ PROTECTED ROUTES ============
 // authMiddleware: Token olmadan giremez
 
-app.use('/categories', authMiddleware, categoryRouter);
 app.use('/tags', authMiddleware, tagRouter);
 app.use('/tasks', authMiddleware, taskRouter);
 

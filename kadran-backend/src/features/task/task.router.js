@@ -1,44 +1,27 @@
 // src/features/task/task.router.js
 
 import { Router } from 'express';
-import {
-  validateCreateTask,
-  validateUpdateTask,
-  validateTaskId,
-  validateTaskTagParams,
-} from './task.validator.js';
-import { validateTagNames } from '../tag/tag.validator.js';
-import {
-  getTasks,
-  createTask,
-  updateTask,
-  deleteTask,
-  toggleTask,
-  addTagsToTask,
-  removeTagFromTask,
-} from './task.controller.js';
+import { authMiddleware } from '../../shared/middlewares/auth.middleware.js';
+import * as taskValidator from './task.validator.js';
+import * as taskController from './task.controller.js';
 
 const router = Router();
 
-// GET /tasks
-router.get('/', getTasks);
+router.use(authMiddleware);
 
-// POST /tasks
-router.post('/', validateCreateTask, createTask);
+router.get('/', taskController.listTasks);
 
-// PATCH /tasks/:id
-router.patch('/:id', validateTaskId, validateUpdateTask, updateTask);
+router.post('/', taskValidator.createTask, taskController.createTask);
 
-// DELETE /tasks/:id
-router.delete('/:id', validateTaskId, deleteTask);
+router.patch('/:id', taskValidator.updateTask, taskController.updateTask);
 
-// PATCH /tasks/:id/toggle
-router.patch('/:id/toggle', validateTaskId, toggleTask);
+router.delete('/:id', taskController.deleteTask);
 
-// POST /tasks/:id/tags
-router.post('/:id/tags', validateTaskId, validateTagNames, addTagsToTask);
+router.patch('/:id/toggle', taskController.toggleTask);
 
-// DELETE /tasks/:id/tags/:tagId
-router.delete('/:id/tags/:tagId', validateTaskTagParams, removeTagFromTask);
+router.post('/:id/tags', taskController.addTag);
+
+router.delete('/:id/tags/:tagId', taskController.removeTag);
+
 
 export default router;

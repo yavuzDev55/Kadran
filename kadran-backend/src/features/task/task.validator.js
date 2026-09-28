@@ -1,221 +1,308 @@
 // src/features/task/task.validator.js
 
 import { ValidationError } from '../../shared/utils/customErrors.js';
+import {
+  MAX_TIMED_HOURS_WARNING,
+  MAX_RANGE_DAYS_WARNING,
+  MAX_RANGE_DAYS_HARD,
+} from '../../config/limits.js';
 
-const VALID_TYPES = ['DERS', 'SINAV', 'ODEV', 'KISISEL'];
-const VALID_TIME_TYPES = ['HOURLY', 'ALLDAY', 'REMINDER'];
-const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
-const VALID_PATTERNS = ['DAILY', 'WEEKLY', 'MONTHLY'];
-const VALID_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-const TIME_REGEX = /^([0-1]\d|2[0-3]):[0-5]\d$/; // HH:MM
+const TASK_TYPES = ['COURSE', 'EXAM', 'HOMEWORK', 'CUSTOM'];
+const TIME_TYPES = ['TIMED', 'DEADLINE', 'DATE_RANGE'];
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
+const RECURRENCE_PATTERNS = ['DAILY', 'WEEKLY', 'MONTHLY'];
+const WEEK_DAYS = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+];
 
-const isValidTime = (t) => TIME_REGEX.test(t);
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const TAG_REGEX = /^[\p{L}0-9_\- ]{1,50}$/u;
 
-const timeToMinutes = (t) => {
-  const [h, m] = t.split(':').map(Number);
+const isValidDate = (value) => {
+  if (typeof value !== 'string' || !DATE_REGEX.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime());
+};
+
+const isValidTime = (value) => typeof value === 'string' && TIME_REGEX.test(value);
+
+const timeToMinutes = (value) => {
+  const [h, m] = value.split(':').map(Number);
   return h * 60 + m;
 };
 
-export const validateCreateTask = (req, res, next) => {
-  try {
-    const {
-      title, type, categoryId, timeType, date,
-      startTime, endTime, reminderTime,
-      priority, isRecurring, recurrencePattern,
-      recurrenceDays, recurrenceStart, recurrenceEnd, recurrenceDay,
-    } = req.body;
+const dateDiffInDays = (startDate, endDate) => {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+};
 
-    const errors = [];
-
-    // Title
-    if (!title || title.trim() === '') {
-      errors.push('Title is required');
-    } else if (title.length > 255) {
-      errors.push('Title must be 255 characters or less');
+const validateTags = (tags, details) => {
+  if (tags === undefined) return;
+  if (!Array.isArray(tags)) {
+    details.tags = 'tags must be an array of strings';
+    return;
+  }
+  tags.forEach((tag, index) => {
+    if (typeof tag !== 'string' || !TAG_REGEX.test(tag.trim())) {
+      details[`tags[${index}]`] = `Tag at index ${index} is invalid`;
     }
+  });
+};
 
-    // Type
-    if (!type) {
-      errors.push('Type is required');
-    } else if (!VALID_TYPES.includes(type)) {
-      errors.push(`Type must be one of: ${VALID_TYPES.join(', ')}`);
+const validateRecurrence = (body, details) => {
+  if (!body.isRecurring) return;
+
+  if (!RECURRENCE_PATTERNS.includes(body.recurrencePattern)) {
+    details.recurrencePattern = 'recurrencePattern is required when isRecurring is true';
+    return;
+  }
+
+  if (!isValidDate(body.recurrenceStart)) {
+    details.recurrenceStart = 'recurrenceStart is required';
+  }
+
+  if (body.recurrenceEnd !== undefined && body.recurrenceEnd !== null) {
+    if (!isValidDate(body.recurrenceEnd)) {
+      details.recurrenceEnd = 'recurrenceEnd must be a valid date';
     }
+  }
 
-    // CategoryId
-    if (!categoryId) {
-      errors.push('CategoryId is required');
-    } else if (isNaN(parseInt(categoryId))) {
-      errors.push('CategoryId must be a number');
+  if (body.recurrencePattern === 'WEEKLY') {
+    if (
+      !Array.isArray(body.recurrenceDays) ||
+      body.recurrenceDays.length === 0 ||
+      body.recurrenceDays.some((day) => !WEEK_DAYS.includes(day))
+    ) {
+      details.recurrenceDays = 'recurrenceDays is required for WEEKLY recurrence';
     }
+  }
 
-    // TimeType
-    if (!timeType) {
-      errors.push('TimeType is required');
-    } else if (!VALID_TIME_TYPES.includes(timeType)) {
-      errors.push(`TimeType must be one of: ${VALID_TIME_TYPES.join(', ')}`);
+  if (body.recurrencePattern === 'MONTHLY') {
+    const day = body.recurrenceDay;
+    if (typeof day !== 'number' || !((day >= 1 && day <= 31) || day === -1)) {
+      details.recurrenceDay = 'recurrenceDay must be between 1-31 or -1 for MONTHLY recurrence';
     }
-
-    // Date
-    if (!date) {
-      errors.push('Date is required');
-    } else if (isNaN(new Date(date).getTime())) {
-      errors.push('Invalid date format');
-    }
-
-    // TimeType'a göre alan kontrolleri
-    if (timeType === 'HOURLY') {
-      if (!startTime) {
-        errors.push('startTime is required for HOURLY tasks');
-      } else if (!isValidTime(startTime)) {
-        errors.push('startTime must be in HH:MM format (e.g. 09:00)');
-      }
-
-      if (!endTime) {
-        errors.push('endTime is required for HOURLY tasks');
-      } else if (!isValidTime(endTime)) {
-        errors.push('endTime must be in HH:MM format (e.g. 11:00)');
-      }
-
-      if (startTime && endTime && isValidTime(startTime) && isValidTime(endTime)) {
-        if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
-          errors.push('startTime must be before endTime');
-        }
-      }
-    }
-
-    if (timeType === 'REMINDER') {
-      if (!reminderTime) {
-        errors.push('reminderTime is required for REMINDER tasks');
-      } else if (!isValidTime(reminderTime)) {
-        errors.push('reminderTime must be in HH:MM format (e.g. 08:00)');
-      }
-    }
-
-    // Priority (opsiyonel, default MEDIUM)
-    if (priority && !VALID_PRIORITIES.includes(priority)) {
-      errors.push(`Priority must be one of: ${VALID_PRIORITIES.join(', ')}`);
-    }
-
-    // Recurrence
-    if (isRecurring) {
-      if (!recurrencePattern) {
-        errors.push('recurrencePattern is required when isRecurring is true');
-      } else if (!VALID_PATTERNS.includes(recurrencePattern)) {
-        errors.push(`recurrencePattern must be one of: ${VALID_PATTERNS.join(', ')}`);
-      }
-
-      if (!recurrenceStart) {
-        errors.push('recurrenceStart is required when isRecurring is true');
-      }
-
-      if (recurrencePattern === 'WEEKLY') {
-        if (!recurrenceDays) {
-          errors.push('recurrenceDays is required for WEEKLY pattern (e.g. MON,WED,FRI)');
-        } else {
-          const days = recurrenceDays.split(',').map(d => d.trim());
-          const invalidDays = days.filter(d => !VALID_DAYS.includes(d));
-          if (invalidDays.length > 0) {
-            errors.push(`Invalid days: ${invalidDays.join(', ')}. Use: ${VALID_DAYS.join(', ')}`);
-          }
-        }
-      }
-
-      if (recurrencePattern === 'MONTHLY' && recurrenceDay !== undefined) {
-        const day = parseInt(recurrenceDay);
-        if (isNaN(day) || (day < 1 || day > 31) && day !== -1) {
-          errors.push('recurrenceDay must be 1-31 or -1 (last day of month)');
-        }
-      }
-
-      if (recurrenceStart && recurrenceEnd) {
-        if (new Date(recurrenceEnd) <= new Date(recurrenceStart)) {
-          errors.push('recurrenceEnd must be after recurrenceStart');
-        }
-      }
-    }
-
-    if (errors.length > 0) throw new ValidationError('Task validation failed', { errors });
-
-    next();
-  } catch (error) {
-    next(error);
   }
 };
 
-export const validateUpdateTask = (req, res, next) => {
-  try {
-    const { title, type, timeType, startTime, endTime, reminderTime, priority } = req.body;
-    const errors = [];
+// Out of scope in the official v3 doc (see §11.2), added at the user's
+// request. Rule: only meaningful for TIMED + weekly-recurring tasks; each
+// weekday gets its own slot instead of a single top-level startTime/endTime.
+const validateFlexibleSchedule = (body, details) => {
+  if (!body.isFlexibleSchedule) return;
 
-    if (title !== undefined) {
-      if (title.trim() === '') errors.push('Title cannot be empty');
-      if (title.length > 255) errors.push('Title must be 255 characters or less');
+  if (body.timeType !== 'TIMED') {
+    details.isFlexibleSchedule = 'isFlexibleSchedule is only allowed when timeType is TIMED';
+  }
+
+  if (!body.isRecurring || body.recurrencePattern !== 'WEEKLY') {
+    details.isFlexibleSchedule =
+      'isFlexibleSchedule requires isRecurring=true and recurrencePattern=WEEKLY';
+  }
+
+  if (!Array.isArray(body.schedules) || body.schedules.length === 0) {
+    details.schedules = 'schedules is required when isFlexibleSchedule is true';
+    return;
+  }
+
+  const seenDays = new Set();
+
+  body.schedules.forEach((schedule, index) => {
+    if (!schedule || typeof schedule !== 'object') {
+      details[`schedules[${index}]`] = 'Invalid schedule entry';
+      return;
     }
 
-    if (type !== undefined && !VALID_TYPES.includes(type)) {
-      errors.push(`Type must be one of: ${VALID_TYPES.join(', ')}`);
+    if (!WEEK_DAYS.includes(schedule.dayOfWeek)) {
+      details[`schedules[${index}].dayOfWeek`] = 'Invalid dayOfWeek';
+    } else if (seenDays.has(schedule.dayOfWeek)) {
+      details[`schedules[${index}].dayOfWeek`] = 'Duplicate dayOfWeek in schedules';
+    } else {
+      seenDays.add(schedule.dayOfWeek);
     }
 
-    if (timeType !== undefined && !VALID_TIME_TYPES.includes(timeType)) {
-      errors.push(`TimeType must be one of: ${VALID_TIME_TYPES.join(', ')}`);
+    if (!isValidTime(schedule.startTime)) {
+      details[`schedules[${index}].startTime`] = 'startTime must be in HH:MM format';
     }
-
-    if (startTime !== undefined && !isValidTime(startTime)) {
-      errors.push('startTime must be in HH:MM format');
+    if (!isValidTime(schedule.endTime)) {
+      details[`schedules[${index}].endTime`] = 'endTime must be in HH:MM format';
     }
-
-    if (endTime !== undefined && !isValidTime(endTime)) {
-      errors.push('endTime must be in HH:MM format');
+    if (
+      isValidTime(schedule.startTime) &&
+      isValidTime(schedule.endTime) &&
+      timeToMinutes(schedule.startTime) >= timeToMinutes(schedule.endTime)
+    ) {
+      details[`schedules[${index}].startTime`] = 'startTime must be before endTime';
     }
+  });
+};
 
-    if (startTime && endTime && isValidTime(startTime) && isValidTime(endTime)) {
-      if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
-        errors.push('startTime must be before endTime');
+const validateTimed = (body, details, warnings) => {
+  if (!isValidDate(body.date)) {
+    details.date = 'date is required';
+  }
+
+  // When isFlexibleSchedule is true, the top-level startTime/endTime are
+  // not used; the actual slots are checked in validateFlexibleSchedule.
+  if (body.isFlexibleSchedule) {
+    if (body.startTime !== undefined || body.endTime !== undefined) {
+      details.startTime =
+        'startTime/endTime are not used when isFlexibleSchedule is true (use schedules)';
+    }
+    return;
+  }
+
+  if (!isValidTime(body.startTime)) {
+    details.startTime = 'startTime is required and must be in HH:MM format';
+  }
+  if (!isValidTime(body.endTime)) {
+    details.endTime = 'endTime is required and must be in HH:MM format';
+  }
+  if (isValidTime(body.startTime) && isValidTime(body.endTime)) {
+    const start = timeToMinutes(body.startTime);
+    const end = timeToMinutes(body.endTime);
+    if (start >= end) {
+      details.startTime = 'startTime must be before endTime';
+    } else if (end - start >= MAX_TIMED_HOURS_WARNING * 60) {
+      warnings.push(
+        `This block is close to or equal to ${MAX_TIMED_HOURS_WARNING} hours, please confirm it is correct`
+      );
+    }
+  }
+  if (body.rangeStartDate || body.rangeEndDate || body.rangeStartTime || body.rangeEndTime) {
+    details.timeType = 'range fields are not allowed for TIMED tasks';
+  }
+};
+
+const validateDeadline = (body, details) => {
+  if (!isValidDate(body.date)) {
+    details.date = 'date is required';
+  }
+  if (body.startTime !== undefined || body.endTime !== undefined) {
+    details.timeType = 'startTime/endTime are not allowed for DEADLINE tasks';
+  }
+  if (body.isFlexibleSchedule) {
+    details.isFlexibleSchedule = 'isFlexibleSchedule is only allowed when timeType is TIMED';
+  }
+};
+
+const validateDateRange = (body, details, warnings) => {
+  if (!isValidDate(body.rangeStartDate)) {
+    details.rangeStartDate = 'rangeStartDate is required';
+  }
+  if (!isValidDate(body.rangeEndDate)) {
+    details.rangeEndDate = 'rangeEndDate is required';
+  }
+
+  if (
+    body.rangeStartTime !== undefined &&
+    body.rangeStartTime !== null &&
+    !isValidTime(body.rangeStartTime)
+  ) {
+    details.rangeStartTime = 'rangeStartTime must be in HH:MM format';
+  }
+  if (
+    body.rangeEndTime !== undefined &&
+    body.rangeEndTime !== null &&
+    !isValidTime(body.rangeEndTime)
+  ) {
+    details.rangeEndTime = 'rangeEndTime must be in HH:MM format';
+  }
+
+  if (isValidDate(body.rangeStartDate) && isValidDate(body.rangeEndDate)) {
+    const diffDays = dateDiffInDays(body.rangeStartDate, body.rangeEndDate);
+
+    if (diffDays < 0) {
+      details.rangeStartDate = 'rangeStartDate must be before or equal to rangeEndDate';
+    } else {
+      if (
+        diffDays === 0 &&
+        isValidTime(body.rangeStartTime) &&
+        isValidTime(body.rangeEndTime) &&
+        timeToMinutes(body.rangeStartTime) >= timeToMinutes(body.rangeEndTime)
+      ) {
+        details.rangeStartTime = 'rangeStartTime must be before rangeEndTime on the same day';
+      }
+
+      if (diffDays > MAX_RANGE_DAYS_HARD) {
+        details.rangeEndDate = `Date range exceeds ${MAX_RANGE_DAYS_HARD} days`;
+      } else if (diffDays > MAX_RANGE_DAYS_WARNING) {
+        warnings.push(
+          `This process is longer than ${MAX_RANGE_DAYS_WARNING} days, please confirm it is correct`
+        );
       }
     }
+  }
 
-    if (reminderTime !== undefined && !isValidTime(reminderTime)) {
-      errors.push('reminderTime must be in HH:MM format');
-    }
-
-    if (priority !== undefined && !VALID_PRIORITIES.includes(priority)) {
-      errors.push(`Priority must be one of: ${VALID_PRIORITIES.join(', ')}`);
-    }
-
-    if (errors.length > 0) throw new ValidationError('Task update validation failed', { errors });
-
-    next();
-  } catch (error) {
-    next(error);
+  if (body.date !== undefined || body.startTime !== undefined || body.endTime !== undefined) {
+    details.timeType = 'date/startTime/endTime are not allowed for DATE_RANGE tasks';
+  }
+  if (body.isFlexibleSchedule) {
+    details.isFlexibleSchedule = 'isFlexibleSchedule is only allowed when timeType is TIMED';
   }
 };
 
-export const validateTaskId = (req, res, next) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id) || id <= 0) throw new ValidationError('Invalid task ID');
-    req.params.id = id;
-    next();
-  } catch (error) {
-    next(error);
+const validateTaskBody = (body) => {
+  const details = {};
+  const warnings = [];
+
+  if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.length > 255) {
+    details.title = 'Title is required';
   }
+
+  if (!TASK_TYPES.includes(body.type)) {
+    details.type = 'Invalid task type';
+  }
+
+  if (!TIME_TYPES.includes(body.timeType)) {
+    details.timeType = 'Invalid time type';
+  } else if (body.timeType === 'TIMED') {
+    validateTimed(body, details, warnings);
+  } else if (body.timeType === 'DEADLINE') {
+    validateDeadline(body, details);
+  } else if (body.timeType === 'DATE_RANGE') {
+    validateDateRange(body, details, warnings);
+  }
+
+  if (body.priority !== undefined && !PRIORITIES.includes(body.priority)) {
+    details.priority = 'Invalid priority';
+  }
+
+  validateRecurrence(body, details);
+  validateFlexibleSchedule(body, details);
+  validateTags(body.tags, details);
+
+  return { details, warnings };
 };
 
-export const validateTaskTagParams = (req, res, next) => {
-  try {
-    const errors = [];
-    const taskId = parseInt(req.params.id);
-    const tagId = parseInt(req.params.tagId);
+export const createTask = (req, res, next) => {
+  const { details, warnings } = validateTaskBody(req.body);
 
-    if (isNaN(taskId) || taskId <= 0) errors.push('Invalid task ID');
-    if (isNaN(tagId) || tagId <= 0) errors.push('Invalid tag ID');
-
-    if (errors.length > 0) throw new ValidationError('Invalid parameters', { errors });
-
-    req.params.id = taskId;
-    req.params.tagId = tagId;
-    next();
-  } catch (error) {
-    next(error);
+  if (Object.keys(details).length > 0) {
+    return next(new ValidationError('Validation failed', details));
   }
+
+  req.taskWarnings = warnings;
+  next();
 };
+
+export const updateTask = (req, res, next) => {
+  const { details, warnings } = validateTaskBody(req.body);
+
+  if (Object.keys(details).length > 0) {
+    return next(new ValidationError('Validation failed', details));
+  }
+
+  req.taskWarnings = warnings;
+  next();
+};
+
+export { validateTaskBody };

@@ -1,11 +1,15 @@
 // src/features/task/task.db.js
+// v3: removed `category: true` from the include block (the Category model
+// is being removed). The from/to filter now covers both TIMED/DEADLINE
+// (`date`) and DATE_RANGE (`rangeStartDate`/`rangeEndDate`) fields.
+// `schedules` is included and replaceTaskSchedules was added to support
+// isFlexibleSchedule / TaskSchedule.
 
 import prisma from '../../config/database.js';
 
-// Task'ı ilişkileriyle birlikte getiren yardımcı include bloğu
 const taskInclude = {
-  category: true,
   tags: { include: { tag: true } },
+  schedules: true,
 };
 
 export const findTasksByUser = async (userId, filters = {}) => {
@@ -14,11 +18,24 @@ export const findTasksByUser = async (userId, filters = {}) => {
   const where = { userId };
 
   if (from || to) {
-    where.date = {};
-    if (from) where.date.gte = new Date(from);
-    if (to) where.date.lte = new Date(to);
+    where.OR = [
+      {
+        date: {
+          ...(from && { gte: new Date(from) }),
+          ...(to && { lte: new Date(to) }),
+        },
+      },
+      {
+        rangeStartDate: {
+          ...(from && { gte: new Date(from) }),
+          ...(to && { lte: new Date(to) }),
+        },
+      },
+    ];
   }
 
+  // v3: the 'category' filter now matches the TaskType enum (Task.type),
+  // not a Category relation.
   if (category) where.type = category;
   if (priority) where.priority = priority;
   if (showCompleted === false) where.isCompleted = false;
@@ -33,7 +50,7 @@ export const findTasksByUser = async (userId, filters = {}) => {
     prisma.task.findMany({
       where,
       include: taskInclude,
-      orderBy: { date: 'asc' },
+      orderBy: [{ date: 'asc' }, { rangeStartDate: 'asc' }],
       take: limit,
       skip: offset,
     }),
@@ -73,4 +90,21 @@ export const toggleTask = async (id) => {
     data: { isCompleted: !task.isCompleted },
     include: taskInclude,
   });
+};
+
+// v3: fully replaces the weekly slot list for isFlexibleSchedule=true
+// tasks (deletes existing rows, inserts the new ones). Passing an empty
+// array clears all slots (used when a task leaves flexible-schedule mode).
+export const replaceTaskSchedules = (taskId, schedules) => {
+  return prisma.$transaction([
+    prisma.taskSchedule.deleteMany({ where: { taskId } }),
+    prisma.taskSchedule.createMany({
+      data: schedules.map((s) => ({
+        taskId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      })),
+    }),
+  ]);
 };

@@ -1,0 +1,521 @@
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import api from "../services/api";
+
+const TASK_TYPES = [
+  { id: "COURSE", label: "Course", defaultTime: "TIMED" },
+  { id: "EXAM", label: "Exam", defaultTime: "TIMED" },
+  { id: "HOMEWORK", label: "Homework", defaultTime: "DEADLINE" },
+  { id: "CUSTOM", label: "Custom", defaultTime: "TIMED" },
+];
+
+const DAYS_OF_WEEK = [
+  { id: "MONDAY", label: "Monday" },
+  { id: "TUESDAY", label: "Tuesday" },
+  { id: "WEDNESDAY", label: "Wednesday" },
+  { id: "THURSDAY", label: "Thursday" },
+  { id: "FRIDAY", label: "Friday" },
+  { id: "SATURDAY", label: "Saturday" },
+  { id: "SUNDAY", label: "Sunday" },
+];
+
+export default function TaskCreatePage() {
+  const navigate = useNavigate();
+  const [selectedType, setSelectedType] = useState("COURSE");
+  
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
+  const [tagsInput, setTagsInput] = useState("");
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrencePattern, setRecurrencePattern] = useState("WEEKLY");
+  const [weeklySchedules, setWeeklySchedules] = useState({});
+  const [recurrenceDay, setRecurrenceDay] = useState(1);
+  const [recurrenceStart, setRecurrenceStart] = useState("");
+  const [recurrenceEnd, setRecurrenceEnd] = useState("");
+
+  const [timeType, setTimeType] = useState("TIMED");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+
+  const [rangeStartDate, setRangeStartDate] = useState("");
+  const [rangeStartTime, setRangeStartTime] = useState("");
+  const [rangeEndDate, setRangeEndDate] = useState("");
+  const [rangeEndTime, setRangeEndTime] = useState("");
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleTypeChange = (typeId) => {
+    setSelectedType(typeId);
+    if (typeId === "COURSE" || typeId === "EXAM") {
+      setTimeType("TIMED");
+    } else if (typeId === "HOMEWORK") {
+      setTimeType("DEADLINE");
+    }
+  };
+
+  const handleScheduleTimeChange = (day, field, value) => {
+    setWeeklySchedules(prev => ({
+      ...prev,
+      [day]: {
+        ...(prev[day] || { startTime: "", endTime: "" }),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const formattedTags = tagsInput
+        ? tagsInput.split(",").map(t => t.trim()).filter(Boolean)
+        : [];
+
+      const payload = {
+        title,
+        description: description || null,
+        type: selectedType,
+        priority,
+        isRecurring,
+        tags: formattedTags,
+      };
+
+      if (isRecurring) {
+        payload.recurrencePattern = recurrencePattern;
+        payload.recurrenceStart = recurrenceStart || new Date().toISOString().slice(0, 10);
+        payload.recurrenceEnd = recurrenceEnd || null;
+
+        if (recurrencePattern === "WEEKLY") {
+          const activeSchedules = Object.entries(weeklySchedules)
+            .filter(([_, times]) => times.startTime && times.endTime)
+            .map(([dayOfWeek, times]) => ({
+              dayOfWeek,
+              startTime: times.startTime,
+              endTime: times.endTime
+            }));
+
+          if (activeSchedules.length > 0) {
+            payload.isFlexibleSchedule = true;
+            payload.schedules = activeSchedules;
+            payload.timeType = "TIMED";
+            payload.date = payload.recurrenceStart;
+          } else {
+            throw new Error("Please configure at least one day with start and end times for weekly recurrence.");
+          }
+        } else if (recurrencePattern === "MONTHLY") {
+          payload.timeType = "TIMED";
+          payload.recurrenceDay = Number(recurrenceDay);
+          payload.date = payload.recurrenceStart;
+          payload.startTime = startTime || "09:00";
+          payload.endTime = endTime || "10:00";
+        } else {
+          payload.timeType = "TIMED";
+          payload.date = payload.recurrenceStart;
+          payload.startTime = startTime || "09:00";
+          payload.endTime = endTime || "10:00";
+        }
+      } else {
+        payload.timeType = selectedType === "COURSE" || selectedType === "EXAM" ? "TIMED" : selectedType === "HOMEWORK" ? "DEADLINE" : timeType;
+
+        if (payload.timeType === "TIMED") {
+          payload.date = date;
+          payload.startTime = startTime || undefined;
+          payload.endTime = endTime || undefined;
+        } else if (payload.timeType === "DEADLINE") {
+          payload.date = date;
+        } else if (payload.timeType === "DATE_RANGE") {
+          payload.rangeStartDate = rangeStartDate;
+          payload.rangeStartTime = rangeStartTime || null;
+          payload.rangeEndDate = rangeEndDate;
+          payload.rangeEndTime = rangeEndTime || null;
+        }
+      }
+
+      await api.post("/tasks", payload);
+      navigate("/");
+    } catch (err) {
+      const errDetail = err.response?.data?.error?.details;
+      const errMsg = err.response?.data?.error?.message;
+      setError(JSON.stringify(errDetail) || errMsg || err.message || "Failed to create task");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto mt-10 p-4 mb-20">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-slate-100">Create New Task</h1>
+        <Link to="/" className="text-sm text-slate-400 hover:text-white transition">
+          &larr; Back to Tasks
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+        {TASK_TYPES.map((type) => (
+          <button
+            key={type.id}
+            type="button"
+            onClick={() => handleTypeChange(type.id)}
+            className={`p-3 rounded-lg border text-left transition ${
+              selectedType === type.id
+                ? "bg-blue-600 border-blue-500 text-white shadow-lg"
+                : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+            }`}
+          >
+            <div className="font-bold text-sm">{type.label}</div>
+            <div className="text-xs opacity-80 mt-0.5">
+              {type.id === "COURSE" && "Timed Lecture"}
+              {type.id === "EXAM" && "Single Exam"}
+              {type.id === "HOMEWORK" && "Deadline Task"}
+              {type.id === "CUSTOM" && "Flexible Options"}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-xl">
+        {error && (
+          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 text-red-200 rounded text-sm whitespace-pre-wrap">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Task Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Algorithms Lecture"
+              className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional notes..."
+              rows="2"
+              className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Tags (comma-separated)</label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g. important, midterm, project"
+              className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Priority</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+              </select>
+            </div>
+
+            {!isRecurring && (
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Time Type</label>
+                <select
+                  value={
+                    selectedType === "COURSE" || selectedType === "EXAM"
+                      ? "TIMED"
+                      : selectedType === "HOMEWORK"
+                      ? "DEADLINE"
+                      : timeType
+                  }
+                  onChange={(e) => setTimeType(e.target.value)}
+                  disabled={selectedType !== "CUSTOM"}
+                  className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60"
+                >
+                  <option value="TIMED">Timed (Specific Hours)</option>
+                  <option value="DEADLINE">Deadline (Date Only)</option>
+                  <option value="DATE_RANGE">Date Range</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {selectedType !== "EXAM" && (
+            <div className="border-t border-slate-700 pt-3 mt-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm font-semibold text-slate-300">Repeat this task (Recurring)</span>
+              </label>
+
+              {isRecurring && (
+                <div className="flex flex-col gap-3 mt-3 p-3 bg-slate-900/50 rounded border border-slate-700/50">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Pattern</label>
+                    <select
+                      value={recurrencePattern}
+                      onChange={(e) => setRecurrencePattern(e.target.value)}
+                      className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                    >
+                      <option value="DAILY">Daily</option>
+                      <option value="WEEKLY">Weekly (Custom hours per day)</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </select>
+                  </div>
+
+                  {recurrencePattern === "WEEKLY" && (
+                    <div className="flex flex-col gap-2">
+                      <label className="block text-xs text-slate-400 font-semibold">Select Days and Set Hours:</label>
+                      {DAYS_OF_WEEK.map((day) => {
+                        const daySchedule = weeklySchedules[day.id] || { startTime: "", endTime: "" };
+                        const isActive = Boolean(daySchedule.startTime || daySchedule.endTime);
+
+                        return (
+                          <div key={day.id} className={`p-2 rounded border flex flex-col md:flex-row md:items-center justify-between gap-2 ${isActive ? 'bg-slate-800 border-blue-500/50' : 'bg-slate-900/40 border-slate-800'}`}>
+                            <span className="text-xs font-medium text-slate-200 w-24">{day.label}</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={daySchedule.startTime}
+                                onChange={(e) => handleScheduleTimeChange(day.id, 'startTime', e.target.value)}
+                                className="p-1 rounded bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                              />
+                              <span className="text-slate-400 text-xs">to</span>
+                              <input
+                                type="time"
+                                value={daySchedule.endTime}
+                                onChange={(e) => handleScheduleTimeChange(day.id, 'endTime', e.target.value)}
+                                className="p-1 rounded bg-slate-900 border border-slate-700 text-slate-100 text-xs"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {recurrencePattern === "MONTHLY" && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Day of Month (1-31, or -1 for last day)</label>
+                        <input
+                          type="number"
+                          min="-1"
+                          max="31"
+                          value={recurrenceDay}
+                          onChange={(e) => setRecurrenceDay(e.target.value)}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Start Time *</label>
+                          <input
+                            type="time"
+                            value={startTime}
+                            onChange={(e) => setStartTime(e.target.value)}
+                            className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">End Time *</label>
+                          <input
+                            type="time"
+                            value={endTime}
+                            onChange={(e) => setEndTime(e.target.value)}
+                            className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {recurrencePattern === "DAILY" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Start Time *</label>
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">End Time *</label>
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Recurrence Start *</label>
+                      <input
+                        type="date"
+                        value={recurrenceStart}
+                        onChange={(e) => setRecurrenceStart(e.target.value)}
+                        className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Recurrence End (Optional)</label>
+                      <input
+                        type="date"
+                        value={recurrenceEnd}
+                        onChange={(e) => setRecurrenceEnd(e.target.value)}
+                        className="w-full p-1.5 rounded bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isRecurring && (
+            <>
+              {((selectedType === "COURSE" || selectedType === "EXAM") || (selectedType === "CUSTOM" && timeType === "TIMED")) && (
+                <div className="flex flex-col gap-4 p-3 bg-slate-900/50 rounded border border-slate-700/50">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Date *</label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Start Time *</label>
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">End Time *</label>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(selectedType === "HOMEWORK" || (selectedType === "CUSTOM" && timeType === "DEADLINE")) && (
+                <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50">
+                  <label className="block text-xs text-slate-400 mb-1">Due Date *</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                    required
+                  />
+                </div>
+              )}
+
+              {selectedType === "CUSTOM" && timeType === "DATE_RANGE" && (
+                <div className="flex flex-col gap-3 p-3 bg-slate-900/50 rounded border border-slate-700/50">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Start Date *</label>
+                      <input
+                        type="date"
+                        value={rangeStartDate}
+                        onChange={(e) => setRangeStartDate(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={rangeStartTime}
+                        onChange={(e) => setRangeStartTime(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">End Date *</label>
+                      <input
+                        type="date"
+                        value={rangeEndDate}
+                        onChange={(e) => setRangeEndDate(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={rangeEndTime}
+                        onChange={(e) => setRangeEndTime(e.target.value)}
+                        className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded transition disabled:bg-blue-800"
+          >
+            {loading ? "Creating..." : `Create ${selectedType} Task`}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

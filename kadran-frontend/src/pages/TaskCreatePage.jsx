@@ -105,6 +105,8 @@ export default function TaskCreatePage() {
             payload.schedules = activeSchedules;
             payload.timeType = "TIMED";
             payload.date = payload.recurrenceStart;
+            // EKLENEN KISIM: Backend'in beklediği günler dizisi
+            payload.recurrenceDays = activeSchedules.map(s => s.dayOfWeek);
           } else {
             throw new Error("Please configure at least one day with start and end times for weekly recurrence.");
           }

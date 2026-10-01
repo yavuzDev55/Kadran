@@ -6,6 +6,8 @@ import TasksPage from "./pages/TasksPage";
 import TaskCreatePage from "./pages/TaskCreatePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import CalendarPage from "./pages/CalendarPage"; // EKSİK OLAN IMPORT BURADAYDI
+import { Toaster } from 'react-hot-toast';
 
 const router = createBrowserRouter([
   {
@@ -29,6 +31,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "calendar",
+        element: (
+          <ProtectedRoute>
+            <CalendarPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "login",
         element: <LoginPage />,
       },
@@ -43,6 +53,16 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <AuthProvider>
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1e293b', 
+            color: '#fff',
+          }
+        }} 
+      />
       <RouterProvider router={router} />
     </AuthProvider>
   );

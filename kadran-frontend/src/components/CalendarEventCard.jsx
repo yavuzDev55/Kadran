@@ -7,14 +7,15 @@ const TYPE_STYLES = {
   CUSTOM: "bg-slate-700/80 border-slate-400 text-slate-200",
 };
 
-const PRIORITY_ICON = { LOW: "◇", MEDIUM: "■", HIGH: "★" };
+// Kafa karıştıran "■" ikonu yerine daha anlaşılır semboller kullanıldı
+const PRIORITY_ICON = { LOW: "↓", MEDIUM: "•", HIGH: "↑" };
 
 export default function CalendarEventCard({ event, onClick, onToggle }) {
   const styles = TYPE_STYLES[event.type] || TYPE_STYLES.CUSTOM;
   const icon = PRIORITY_ICON[event.priority] || PRIORITY_ICON.MEDIUM;
 
   const handleToggle = (e) => {
-    e.stopPropagation(); // Kartın onClick tetiklenmesini engeller
+    e.stopPropagation();
     if (onToggle) onToggle(event.taskId);
   };
 
@@ -29,13 +30,15 @@ export default function CalendarEventCard({ event, onClick, onToggle }) {
             type="checkbox" 
             checked={event.isCompleted}
             onChange={handleToggle}
+            onClick={(e) => e.stopPropagation()} 
             className="mt-0.5 cursor-pointer accent-green-500"
           />
           <span className={`font-semibold truncate ${event.isCompleted ? 'line-through text-slate-400' : ''}`}>
             {event.title}
           </span>
         </div>
-        <span className="shrink-0 text-[10px] ml-1">{icon}</span>
+        {/* İkonun rengi biraz soluklaştırılarak dikkat dağıtması engellendi */}
+        <span className="shrink-0 text-[11px] font-bold opacity-70 ml-1">{icon}</span>
       </div>
       
       {(event.startTime || event.endTime) && (

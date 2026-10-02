@@ -1,0 +1,107 @@
+import React from "react";
+
+const PRIORITY_LABELS = {
+  LOW: "Low Priority",
+  MEDIUM: "Medium Priority",
+  HIGH: "High Priority",
+};
+
+export default function TaskDetailModal({ event, onClose, onDelete, onEdit }) {
+  if (!event) return null;
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <div className="flex justify-between items-start p-4 border-b border-slate-700/50">
+          <div>
+            <h2 className={`text-xl font-bold ${event.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+              {event.title}
+            </h2>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                {event.type}
+              </span>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                event.priority === 'HIGH' ? 'bg-red-900/50 text-red-300' : 
+                event.priority === 'MEDIUM' ? 'bg-yellow-900/50 text-yellow-300' : 
+                'bg-slate-700 text-slate-300'
+              }`}>
+                {PRIORITY_LABELS[event.priority]}
+              </span>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition p-1 bg-slate-700/50 hover:bg-slate-600 rounded"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-4 flex flex-col gap-4 text-sm text-slate-300">
+          
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Date & Time</span>
+            <div className="flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+              <span>{event.date}</span>
+              {event.startTime && (
+                <>
+                  <span className="text-slate-500">•</span>
+                  <span>{event.startTime} - {event.endTime}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {event.originalTask.description && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Description</span>
+              <p className="bg-slate-900/50 p-2 rounded border border-slate-700/50 whitespace-pre-wrap">
+                {event.originalTask.description}
+              </p>
+            </div>
+          )}
+
+          {event.tags && event.tags.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Tags</span>
+              <div className="flex flex-wrap gap-1.5">
+                {event.tags.map(tag => (
+                  <span key={tag} className="text-xs px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-300">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-slate-700/50 bg-slate-900/30 flex justify-end gap-2">
+          <button 
+            onClick={() => onDelete(event.taskId)}
+            className="px-4 py-2 text-sm font-medium text-red-400 hover:text-white hover:bg-red-600 transition rounded border border-red-900/50"
+          >
+            Delete
+          </button>
+          <button 
+            onClick={() => onEdit(event.taskId)}
+            className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition rounded border border-slate-700"
+          >
+            Edit Task
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}

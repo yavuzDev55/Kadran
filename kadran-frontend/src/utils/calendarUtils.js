@@ -136,3 +136,27 @@ export const getWeekDaysArray = (startDateStr) => {
   }
   return days;
 };
+
+/**
+ * Generates an array of 42 YYYY-MM-DD strings (6 weeks) for a month view.
+ * Ensures the grid always starts on a Monday.
+ */
+export const getMonthDaysArray = (year, monthIndex) => {
+  // monthIndex is 0-11 (JS standard)
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1));
+  const days = [];
+
+  // Find the Monday before or on the 1st of the month
+  let dayOfWeek = firstDay.getUTCDay() || 7; // Convert Sunday(0) to 7
+  const startDate = new Date(firstDay);
+  startDate.setUTCDate(firstDay.getUTCDate() - (dayOfWeek - 1));
+
+  // Generate 42 days (6 full weeks to accommodate any month shape)
+  for (let i = 0; i < 42; i++) {
+    const current = new Date(startDate);
+    current.setUTCDate(startDate.getUTCDate() + i);
+    days.push(current.toISOString().slice(0, 10));
+  }
+  
+  return days;
+};

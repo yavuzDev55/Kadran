@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import api from "../services/api";
-import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
+// useAuth ve Link importları kaldırıldı çünkü artık bu sayfada kullanılmıyorlar
 
 export default function TasksPage() {
-  const { user, logout } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,21 +92,8 @@ export default function TasksPage() {
   return (
     <div className="max-w-4xl mx-auto mt-10 p-4 mb-20">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Welcome, {user?.email}</h1>
-        <div className="flex gap-3">
-          <Link 
-            to="/tasks/new" 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold transition flex items-center"
-          >
-            + New Task
-          </Link>
-          <button 
-            onClick={logout}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold transition"
-          >
-            Logout
-          </button>
-        </div>
+        <h1 className="text-2xl font-bold text-slate-100">Tasks</h1>
+        {/* + New Task ve Logout butonları bu kısımdan tamamen kaldırıldı */}
       </div>
 
       {error && <div className="p-3 mb-4 bg-red-900/50 border border-red-500 text-red-200 rounded">{error}</div>}

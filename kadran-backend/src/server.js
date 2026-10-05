@@ -13,39 +13,36 @@ import taskRouter from './features/task/task.router.js';
 
 dotenv.config();
 
+// JWT_SECRET zorunlu kontrol
+if (!process.env.JWT_SECRET) {
+  console.error('HATA: JWT_SECRET tanımlı değil. .env dosyasını kontrol et.');
+  process.exit(1);
+}
+
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
-// ============ GLOBAL MIDDLEWARES ============
-
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+}));
 app.use(express.json());
 
-// ============ PUBLIC ROUTES ============
-
+// Public routes
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
-
 app.use('/auth', authRouter);
 
-// ============ PROTECTED ROUTES ============
-// authMiddleware: Token olmadan giremez
-
-app.use('/tags', authMiddleware, tagRouter);
+// Protected routes — authMiddleware SADECE burada, router'larda tekrar yok
+app.use('/tags',  authMiddleware, tagRouter);
 app.use('/tasks', authMiddleware, taskRouter);
-
-// ============ 404 ============
 
 app.use((req, res) => {
   res.status(404).json({ success: false, error: { message: 'Route not found' } });
 });
 
-// ============ ERROR HANDLER (en sonda olmalı) ============
-
 app.use(errorHandler);
-
-// ============ START ============
 
 app.listen(PORT, () => {
   console.log(`✅ KADRAN running on http://localhost:${PORT}`);

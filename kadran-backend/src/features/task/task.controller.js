@@ -2,6 +2,15 @@
 
 import * as taskService from './task.service.js';
 
+export const getTask = async (req, res, next) => {
+  try {
+    const task = await taskService.getTask(req.user.id, Number(req.params.id));
+    res.status(200).json({ success: true, data: task });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createTask = async (req, res, next) => {
   try {
     const { task, warnings } = await taskService.createTask(

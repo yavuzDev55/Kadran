@@ -216,11 +216,18 @@ export default function CalendarPage() {
         )}
       </div>
 
-      <TaskDetailModal 
-        event={selectedEvent} 
-        onClose={() => setSelectedEvent(null)} 
+      <TaskDetailModal
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
         onDelete={handleDeleteTask}
         onEdit={handleEditTask}
+        onToggle={(taskId) => {          
+          handleToggleCompletion(taskId); 
+          // Modalda anlık güncelleme için selectedEvent'i güncelle
+          setSelectedEvent(prev =>      
+            prev ? { ...prev, isCompleted: !prev.isCompleted } : prev 
+          );                              
+        }}                                
       />
     </div>
   );

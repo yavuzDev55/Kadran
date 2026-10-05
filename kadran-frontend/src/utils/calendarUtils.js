@@ -1,4 +1,5 @@
-const WEEK_DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+// UTC gün indeksi (0=Pazar) → gün adı (backend ile tutarlı: MONDAY..SUNDAY)
+const UTC_DAY_NAMES = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
 
 /**
  * Normalizes backend tasks into flat CalendarEvent objects suitable for UI rendering.
@@ -35,7 +36,7 @@ export const normalizeTasksToEvents = (tasks, viewStartDate, viewEndDate) => {
 
     while (currentDate <= loopEnd) {
       const dateString = currentDate.toISOString().slice(0, 10);
-      const dayName = WEEK_DAYS[(currentDate.getUTCDay() + 6) % 7]; // Convert JS Day (0=Sun) to MONDAY...
+      const dayName = UTC_DAY_NAMES[currentDate.getUTCDay()];
 
       if (task.recurrencePattern === "DAILY") {
         events.push(createEventObject(task, dateString));

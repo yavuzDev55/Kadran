@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import api from "../services/api";
+import toast from "react-hot-toast";
 
 const TASK_TYPES = [
   { id: "COURSE", label: "Course", defaultTime: "TIMED" },
@@ -21,6 +22,9 @@ const DAYS_OF_WEEK = [
 
 export default function TaskCreatePage() {
   const navigate = useNavigate();
+  const { id } = useParams(); // edit modunda dolu, yeni görevde undefined
+  const isEditMode = Boolean(id);
+  const [loadingTask, setLoadingTask] = useState(isEditMode);
   const [selectedType, setSelectedType] = useState("COURSE");
   
   const [title, setTitle] = useState("");
@@ -47,6 +51,62 @@ export default function TaskCreatePage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Edit modunda mevcut görevi yükle ve form alanlarını doldur
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const fetchTask = async () => {
+      try {
+        const res = await api.get(`/tasks/${id}`);
+        const t = res.data.data;
+
+        setSelectedType(t.type);
+        setTitle(t.title);
+        setDescription(t.description || "");
+        setPriority(t.priority);
+        setTagsInput((t.tags || []).join(", "));
+        setIsRecurring(t.isRecurring);
+
+        if (t.isRecurring) {
+          setRecurrencePattern(t.recurrencePattern || "WEEKLY");
+          setRecurrenceStart(t.recurrenceStart ? t.recurrenceStart.slice(0, 10) : "");
+          setRecurrenceEnd(t.recurrenceEnd ? t.recurrenceEnd.slice(0, 10) : "");
+          setRecurrenceDay(t.recurrenceDay || 1);
+
+          if (t.isFlexibleSchedule && t.schedules) {
+            const schedMap = {};
+            t.schedules.forEach(s => {
+              schedMap[s.dayOfWeek] = { startTime: s.startTime, endTime: s.endTime };
+            });
+            setWeeklySchedules(schedMap);
+          } else {
+            setStartTime(t.startTime || "");
+            setEndTime(t.endTime || "");
+          }
+        } else {
+          setTimeType(t.timeType);
+          if (t.timeType === "TIMED" || t.timeType === "DEADLINE") {
+            setDate(t.date ? t.date.slice(0, 10) : "");
+            setStartTime(t.startTime || "");
+            setEndTime(t.endTime || "");
+          } else if (t.timeType === "DATE_RANGE") {
+            setRangeStartDate(t.rangeStartDate ? t.rangeStartDate.slice(0, 10) : "");
+            setRangeStartTime(t.rangeStartTime || "");
+            setRangeEndDate(t.rangeEndDate ? t.rangeEndDate.slice(0, 10) : "");
+            setRangeEndTime(t.rangeEndTime || "");
+          }
+        }
+      } catch (err) {
+        toast.error("Failed to load task");
+        navigate("/");
+      } finally {
+        setLoadingTask(false);
+      }
+    };
+
+    fetchTask();
+  }, [id, isEditMode]);
 
   const handleTypeChange = (typeId) => {
     setSelectedType(typeId);
@@ -139,7 +199,14 @@ export default function TaskCreatePage() {
         }
       }
 
-      await api.post("/tasks", payload);
+      if (isEditMode) {
+        await api.patch(`/tasks/${id}`, payload);
+        toast.success("Task updated successfully!");
+      } else {
+        await api.post("/tasks", payload);
+        toast.success("Task created successfully!");
+      }
+      navigate("/");
       navigate("/");
     } catch (err) {
       const errDetail = err.response?.data?.error?.details;
@@ -150,10 +217,20 @@ export default function TaskCreatePage() {
     }
   };
 
+  if (loadingTask) {    
+    return (      
+      <div className="flex items-center justify-center h-64 text-slate-400">        
+        Loading task...      
+      </div>    
+    );  
+  }
+  
   return (
     <div className="max-w-2xl mx-auto mt-10 p-4 mb-20">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Create New Task</h1>
+        <h1 className="text-2xl font-bold text-slate-100">
+          {isEditMode ? "Edit Task" : "Create New Task"}
+        </h1>
         <Link to="/" className="text-sm text-slate-400 hover:text-white transition">
           &larr; Back to Tasks
         </Link>
@@ -514,7 +591,9 @@ export default function TaskCreatePage() {
             disabled={loading}
             className="mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded transition disabled:bg-blue-800"
           >
-            {loading ? "Creating..." : `Create ${selectedType} Task`}
+            {loading
+              ? (isEditMode ? "Saving..." : "Creating...")
+              : (isEditMode ? "Save Changes" : `Create ${selectedType} Task`)}
           </button>
         </form>
       </div>

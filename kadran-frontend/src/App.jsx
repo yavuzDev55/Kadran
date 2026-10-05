@@ -32,6 +32,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "tasks/edit/:id",
+        element: (
+          <ProtectedRoute>
+            <TaskCreatePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "calendar",
         element: (
           <ProtectedRoute>

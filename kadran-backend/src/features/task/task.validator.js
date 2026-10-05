@@ -294,8 +294,48 @@ export const createTask = (req, res, next) => {
   next();
 };
 
+// PATCH için: sadece gönderilen alanları validate et
+// timeType gönderilmişse tam validate et, gönderilmemişse sadece gelen alanları kontrol et
 export const updateTask = (req, res, next) => {
-  const { details, warnings } = validateTaskBody(req.body);
+  const body = req.body;
+  const details = {};
+  const warnings = [];
+
+  // Başlık gönderildiyse kontrol et
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.length > 255) {
+      details.title = 'Title is required and must be 1-255 characters';
+    }
+  }
+
+  // Priority gönderildiyse kontrol et
+  if (body.priority !== undefined && !['LOW', 'MEDIUM', 'HIGH'].includes(body.priority)) {
+    details.priority = 'Invalid priority';
+  }
+
+  // timeType gönderildiyse tam zaman validasyonu yap
+  if (body.timeType !== undefined) {
+    const { details: timeDetails, warnings: timeWarnings } = validateTaskBody(body);
+    Object.assign(details, timeDetails);
+    warnings.push(...timeWarnings);
+  } else {
+    // timeType gönderilmemişse sadece gelen saat alanlarını format kontrol et
+    if (body.startTime !== undefined && body.startTime !== null) {
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(body.startTime)) {
+        details.startTime = 'startTime must be in HH:MM format';
+      }
+    }
+    if (body.endTime !== undefined && body.endTime !== null) {
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(body.endTime)) {
+        details.endTime = 'endTime must be in HH:MM format';
+      }
+    }
+  }
+
+  // Recurrence gönderildiyse kontrol et
+  if (body.isRecurring !== undefined) {
+    validateRecurrence(body, details);
+  }
 
   if (Object.keys(details).length > 0) {
     return next(new ValidationError('Validation failed', details));

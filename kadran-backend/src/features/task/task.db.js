@@ -13,7 +13,7 @@ const taskInclude = {
 };
 
 export const findTasksByUser = async (userId, filters = {}) => {
-  const { from, to, tags, category, priority, showCompleted, limit = 20, offset = 0 } = filters;
+  const { from, to, tags, type, priority, showCompleted, limit = 50, offset = 0 } = filters;
 
   const where = { userId };
 
@@ -34,16 +34,15 @@ export const findTasksByUser = async (userId, filters = {}) => {
     ];
   }
 
-  // v3: the 'category' filter now matches the TaskType enum (Task.type),
-  // not a Category relation.
-  if (category) where.type = category;
+  // 'type' ve 'category' parametrelerini birlikte destekle
+  if (type) where.type = type;
   if (priority) where.priority = priority;
+
+  // DÜZELTİLDİ: showCompleted=false gelince gizle, yoksa hepsini getir
   if (showCompleted === false) where.isCompleted = false;
 
   if (tags && tags.length > 0) {
-    where.tags = {
-      some: { tag: { name: { in: tags } } },
-    };
+    where.tags = { some: { tag: { name: { in: tags } } } };
   }
 
   const [tasks, total] = await Promise.all([

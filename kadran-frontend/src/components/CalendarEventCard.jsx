@@ -10,10 +10,14 @@ export default function CalendarEventCard({ event, onClick, onToggle }) {
   // Use effectiveColor from API (color ?? typeDefault), fall back to slate
   const accentColor = event.effectiveColor || '#94a3b8';
 
-  const handleToggle = (e) => {
-    e.stopPropagation();
-    if (onToggle && event.isCompletable !== false) onToggle(event.taskId);
-  };
+// CalendarEventCard.jsx içinde handleToggle:
+const handleToggle = (e) => {
+  e.stopPropagation();
+  if (onToggle && event.isCompletable !== false) {
+    // Pass both taskId and the occurrence date
+    onToggle(event.taskId, event.date);
+  }
+};
 
   return (
     <div

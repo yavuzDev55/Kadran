@@ -1,19 +1,17 @@
 // src/features/task/task.db.js
-// v3: removed `category: true` from the include block (the Category model
-// is being removed). The from/to filter now covers both TIMED/DEADLINE
-// (`date`) and DATE_RANGE (`rangeStartDate`/`rangeEndDate`) fields.
-// `schedules` is included and replaceTaskSchedules was added to support
-// isFlexibleSchedule / TaskSchedule.
 
 import prisma from '../../config/database.js';
 
 const taskInclude = {
   tags: { include: { tag: true } },
   schedules: true,
+  completions: true, // TaskCompletion rows — used to resolve per-occurrence isCompleted
 };
 
+// ─── Task queries ─────────────────────────────────────────────────────────────
+
 export const findTasksByUser = async (userId, filters = {}) => {
-  const { from, to, tags, type, priority, showCompleted, limit = 50, offset = 0 } = filters;
+  const { from, to, tags, type, category, priority, showCompleted, limit = 50, offset = 0 } = filters;
 
   const where = { userId };
 
@@ -34,11 +32,12 @@ export const findTasksByUser = async (userId, filters = {}) => {
     ];
   }
 
-  // 'type' ve 'category' parametrelerini birlikte destekle
-  if (type) where.type = type;
+  // Support both ?type= and legacy ?category= parameter
+  const typeFilter = type || category;
+  if (typeFilter) where.type = typeFilter;
   if (priority) where.priority = priority;
 
-  // DÜZELTİLDİ: showCompleted=false gelince gizle, yoksa hepsini getir
+  // showCompleted=false hides completed tasks; default is to show all
   if (showCompleted === false) where.isCompleted = false;
 
   if (tags && tags.length > 0) {
@@ -59,29 +58,19 @@ export const findTasksByUser = async (userId, filters = {}) => {
   return { tasks, total, hasMore: offset + limit < total };
 };
 
-export const findTaskById = (id) => {
-  return prisma.task.findUnique({ where: { id }, include: taskInclude });
-};
+export const findTaskById = (id) =>
+  prisma.task.findUnique({ where: { id }, include: taskInclude });
 
-export const createTask = (userId, data) => {
-  return prisma.task.create({
-    data: { ...data, userId },
-    include: taskInclude,
-  });
-};
+export const createTask = (userId, data) =>
+  prisma.task.create({ data: { ...data, userId }, include: taskInclude });
 
-export const updateTask = (id, data) => {
-  return prisma.task.update({
-    where: { id },
-    data,
-    include: taskInclude,
-  });
-};
+export const updateTask = (id, data) =>
+  prisma.task.update({ where: { id }, data, include: taskInclude });
 
-export const deleteTask = (id) => {
-  return prisma.task.delete({ where: { id } });
-};
+export const deleteTask = (id) =>
+  prisma.task.delete({ where: { id } });
 
+// Used only for non-recurring tasks (simple boolean flip)
 export const toggleTask = async (id) => {
   const task = await findTaskById(id);
   return prisma.task.update({
@@ -91,11 +80,8 @@ export const toggleTask = async (id) => {
   });
 };
 
-// v3: fully replaces the weekly slot list for isFlexibleSchedule=true
-// tasks (deletes existing rows, inserts the new ones). Passing an empty
-// array clears all slots (used when a task leaves flexible-schedule mode).
-export const replaceTaskSchedules = (taskId, schedules) => {
-  return prisma.$transaction([
+export const replaceTaskSchedules = (taskId, schedules) =>
+  prisma.$transaction([
     prisma.taskSchedule.deleteMany({ where: { taskId } }),
     prisma.taskSchedule.createMany({
       data: schedules.map((s) => ({
@@ -106,4 +92,57 @@ export const replaceTaskSchedules = (taskId, schedules) => {
       })),
     }),
   ]);
+
+// ─── TaskCompletion queries ───────────────────────────────────────────────────
+
+// Returns a Set of 'YYYY-MM-DD' strings for completed occurrences of a task
+export const findCompletionsByTask = async (taskId) => {
+  const rows = await prisma.taskCompletion.findMany({ where: { taskId } });
+  return new Set(rows.map((r) => r.occurrenceDate.toISOString().slice(0, 10)));
+};
+
+// Returns a Map<taskId, Set<'YYYY-MM-DD'>> for a list of task ids — single query, no N+1
+export const findCompletionsByTaskIds = async (taskIds) => {
+  if (!taskIds.length) return new Map();
+
+  const rows = await prisma.taskCompletion.findMany({
+    where: { taskId: { in: taskIds } },
+  });
+
+  const map = new Map();
+  for (const row of rows) {
+    const dateStr = row.occurrenceDate.toISOString().slice(0, 10);
+    if (!map.has(row.taskId)) map.set(row.taskId, new Set());
+    map.get(row.taskId).add(dateStr);
+  }
+  return map;
+};
+
+// Toggle: insert if absent, delete if present. Returns { completed: boolean }
+export const toggleCompletion = async (taskId, occurrenceDate) => {
+  const existing = await prisma.taskCompletion.findUnique({
+    where: { taskId_occurrenceDate: { taskId, occurrenceDate } },
+  });
+
+  if (existing) {
+    await prisma.taskCompletion.delete({ where: { id: existing.id } });
+    return { completed: false };
+  }
+
+  await prisma.taskCompletion.create({ data: { taskId, occurrenceDate } });
+  return { completed: true };
+};
+
+// Removes completion records that no longer match valid occurrence dates
+export const pruneCompletions = async (taskId, validDates) => {
+  if (!validDates || validDates.length === 0) {
+    await prisma.taskCompletion.deleteMany({ where: { taskId } });
+    return;
+  }
+  await prisma.taskCompletion.deleteMany({
+    where: {
+      taskId,
+      occurrenceDate: { notIn: validDates },
+    },
+  });
 };

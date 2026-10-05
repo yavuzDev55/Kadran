@@ -49,8 +49,13 @@ export const deleteTask = async (req, res, next) => {
 
 export const toggleTask = async (req, res, next) => {
   try {
-    const task = await taskService.toggleTask(req.user.id, Number(req.params.id));
-    res.status(200).json({ success: true, data: task });
+    // date is required for recurring tasks, optional for non-recurring
+    const { date } = req.body;
+    const result = await taskService.toggleTask(req.user.id, Number(req.params.id), date);
+    res.status(200).json({ success: true, data: result.task, meta: {
+      toggledDate: result.toggledDate ?? null,
+      completed: result.completed,
+    }});
   } catch (error) {
     next(error);
   }

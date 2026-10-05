@@ -118,6 +118,7 @@ model Task {
   userId Int
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags   TaskTag[]
+  completions TaskCompletion[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -158,12 +159,16 @@ model TaskTag {
   @@map("task_tags")
 }
 
-// ============================================================
-// REMOVED in v3 (still present in your current schema):
-//   model Category { id, name, color, userId }
-//   Task.categoryId Int  (NOT NULL foreign key -> Category)
-//   Task.reminderTime String?
-//   TaskType.KISISEL (replaced by CUSTOM)
-//   TaskType.DERS / SINAV / ODEV (renamed to COURSE / EXAM / HOMEWORK)
-//   TimeType.HOURLY, TimeType.ALLDAY, TimeType.REMINDER
-// ============================================================
+model TaskCompletion {
+  id             Int      @id @default(autoincrement())
+  occurrenceDate DateTime @db.Date
+
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  completedAt DateTime @default(now())
+
+  @@unique([taskId, occurrenceDate])
+  @@index([taskId])
+  @@map("task_completions")
+}

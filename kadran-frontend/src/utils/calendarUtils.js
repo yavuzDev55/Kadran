@@ -1,21 +1,23 @@
-// UTC gün indeksi (0=Pazar) → gün adı (backend ile tutarlı: MONDAY..SUNDAY)
-const UTC_DAY_NAMES = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
+// src/utils/calendarUtils.js
+
+// UTC day index (0=Sunday) → day name matching backend MONDAY..SUNDAY convention
+const UTC_DAY_NAMES = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 
 /**
- * Normalizes backend tasks into flat CalendarEvent objects suitable for UI rendering.
- * It handles recurring tasks, expanding them into individual instances.
+ * Normalizes backend tasks into flat CalendarEvent objects for UI rendering.
+ * Recurring tasks are expanded into individual occurrence instances.
+ * Per-occurrence completion is resolved from task.completedDates (array of 'YYYY-MM-DD').
  */
 export const normalizeTasksToEvents = (tasks, viewStartDate, viewEndDate) => {
   const events = [];
-  const startObj = new Date(viewStartDate);
-  const endObj = new Date(viewEndDate);
 
   tasks.forEach((task) => {
-    // 1. NON-RECURRING TASKS
     if (!task.isRecurring) {
-      // Use date for TIMED/DEADLINE, or rangeStartDate for DATE_RANGE
-      const targetDate = task.date 
-        ? task.date.slice(0, 10) 
+      // ANYTIME tasks have no date — skip calendar placement (shown in separate panel)
+      if (task.timeType === 'ANYTIME') return;
+
+      const targetDate = task.date
+        ? task.date.slice(0, 10)
         : task.rangeStartDate?.slice(0, 10);
 
       if (targetDate && isDateInRange(targetDate, viewStartDate, viewEndDate)) {
@@ -24,44 +26,57 @@ export const normalizeTasksToEvents = (tasks, viewStartDate, viewEndDate) => {
       return;
     }
 
-    // 2. RECURRING TASKS (Expanding instances)
-    const recurrenceStart = new Date(task.recurrenceStart);
+    // Recurring tasks: expand occurrences within view range
+    const recurrenceStart = task.recurrenceStart
+      ? new Date(task.recurrenceStart)
+      : new Date(viewStartDate);
     const recurrenceEnd = task.recurrenceEnd ? new Date(task.recurrenceEnd) : null;
-    
-    // Determine the loop boundaries (intersection of view range and task recurrence range)
-    let loopStart = startObj > recurrenceStart ? startObj : recurrenceStart;
-    let loopEnd = recurrenceEnd && recurrenceEnd < endObj ? recurrenceEnd : endObj;
 
-    let currentDate = new Date(loopStart);
+    const viewStart = new Date(viewStartDate);
+    const viewEnd   = new Date(viewEndDate);
 
-    while (currentDate <= loopEnd) {
-      const dateString = currentDate.toISOString().slice(0, 10);
-      const dayName = UTC_DAY_NAMES[currentDate.getUTCDay()];
+    const loopStart = recurrenceStart > viewStart ? recurrenceStart : viewStart;
+    const loopEnd   = recurrenceEnd && recurrenceEnd < viewEnd ? recurrenceEnd : viewEnd;
 
-      if (task.recurrencePattern === "DAILY") {
-        events.push(createEventObject(task, dateString));
-      } 
-      else if (task.recurrencePattern === "WEEKLY") {
-        // Check if today's day name is in the recurrenceDays string/array
-        const daysArray = typeof task.recurrenceDays === "string" 
-          ? task.recurrenceDays.split(",") 
+    // Build a Set of completed dates for O(1) lookup
+    const completedSet = new Set(task.completedDates || []);
+
+    let current = new Date(loopStart);
+    let iterations = 0;
+    const MAX_ITER = 500; // safety cap
+
+    while (current <= loopEnd && iterations < MAX_ITER) {
+      iterations++;
+      const dateStr = current.toISOString().slice(0, 10);
+      // FIX: use UTC_DAY_NAMES directly — previous (getUTCDay()+6)%7 mapped Sunday to Saturday
+      const dayName = UTC_DAY_NAMES[current.getUTCDay()];
+      let matched = false;
+
+      if (task.recurrencePattern === 'DAILY') {
+        matched = true;
+      } else if (task.recurrencePattern === 'WEEKLY') {
+        const daysArray = typeof task.recurrenceDays === 'string'
+          ? task.recurrenceDays.split(',').map((d) => d.trim())
           : (task.recurrenceDays || []);
-          
-        if (daysArray.includes(dayName)) {
-          events.push(createEventObject(task, dateString, dayName));
-        }
-      } 
-      else if (task.recurrencePattern === "MONTHLY") {
+        matched = daysArray.includes(dayName);
+      } else if (task.recurrencePattern === 'MONTHLY') {
         const targetDay = parseInt(task.recurrenceDay, 10);
-        // Basic implementation for monthly: match the day of the month
-        // -1 logic (last day of month) can be added here later
-        if (currentDate.getUTCDate() === targetDay) {
-          events.push(createEventObject(task, dateString));
+        if (targetDay === -1) {
+          // Last day of month
+          const lastDay = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 0));
+          matched = current.getUTCDate() === lastDay.getUTCDate();
+        } else {
+          matched = current.getUTCDate() === targetDay;
         }
       }
 
-      // Move to next day
-      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      if (matched) {
+        // Per-occurrence isCompleted: check completedDates set
+        const isCompleted = completedSet.has(dateStr);
+        events.push(createEventObject(task, dateStr, dayName, isCompleted));
+      }
+
+      current.setUTCDate(current.getUTCDate() + 1);
     }
   });
 
@@ -69,43 +84,51 @@ export const normalizeTasksToEvents = (tasks, viewStartDate, viewEndDate) => {
 };
 
 /**
- * Creates a standardized flat event object.
+ * Creates a standardized flat event object for one occurrence.
+ * isCompleted can be overridden per-occurrence (recurring tasks).
  */
-const createEventObject = (task, dateString, dayName = null) => {
+const createEventObject = (task, dateString, dayName = null, isCompletedOverride = null) => {
   let startTime = task.startTime;
   let endTime = task.endTime;
 
+  // Flexible schedule: look up per-day slot
   if (task.isFlexibleSchedule && task.schedules && dayName) {
-    const daySchedule = task.schedules.find(s => s.dayOfWeek === dayName);
-    if (daySchedule) {
-      startTime = daySchedule.startTime;
-      endTime = daySchedule.endTime;
-    }
+    const slot = task.schedules.find((s) => s.dayOfWeek === dayName);
+    if (slot) { startTime = slot.startTime; endTime = slot.endTime; }
   }
 
-  // Calculate numeric hours for grid positioning (e.g., "09:30" -> 9.5)
   let startHourNum = null;
-  let durationNum = 1; // Default duration
+  let durationNum = 1;
 
   if (startTime) {
     const [h, m] = startTime.split(':').map(Number);
-    startHourNum = h + (m / 60);
-    
+    startHourNum = h + m / 60;
+
     if (endTime) {
       const [eh, em] = endTime.split(':').map(Number);
-      let endHourNum = eh + (em / 60);
-      if (endHourNum < startHourNum) endHourNum += 24; // Handle midnight cross
+      let endHourNum = eh + em / 60;
+      if (endHourNum < startHourNum) endHourNum += 24;
       durationNum = endHourNum - startHourNum;
+    } else {
+      // TIMED_OPEN: render as a short 0.5h block
+      durationNum = 0.5;
     }
   }
+
+  // isCompleted: per-occurrence override takes priority, then task-level flag
+  const isCompleted = isCompletedOverride !== null ? isCompletedOverride : (task.isCompleted || false);
 
   return {
     id: `${task.id}-${dateString}`,
     taskId: task.id,
     title: task.title,
     type: task.type,
+    timeType: task.timeType,
     priority: task.priority,
-    isCompleted: task.isCompleted,
+    isCompleted,
+    isCompletable: task.isCompletable !== false,
+    isPinned: task.isPinned || false,
+    effectiveColor: task.effectiveColor || task.color || null,
     date: dateString,
     startTime: startTime || null,
     endTime: endTime || null,
@@ -113,27 +136,15 @@ const createEventObject = (task, dateString, dayName = null) => {
     durationNum,
     tags: task.tags || [],
     originalTask: task,
-    effectiveColor: task.effectiveColor || task.color || null,
-    isCompletable:  task.isCompletable !== false,
-    isPinned:       task.isPinned || false,
-    originalTask:   task, 
   };
 };
 
-/**
- * Helper: Checks if a YYYY-MM-DD string falls within a start and end YYYY-MM-DD string.
- */
-const isDateInRange = (dateStr, startStr, endStr) => {
-  return dateStr >= startStr && dateStr <= endStr;
-};
+const isDateInRange = (dateStr, startStr, endStr) =>
+  dateStr >= startStr && dateStr <= endStr;
 
-/**
- * Helper: Generates an array of YYYY-MM-DD strings for a given week.
- */
 export const getWeekDaysArray = (startDateStr) => {
   const days = [];
   const start = new Date(startDateStr);
-  
   for (let i = 0; i < 7; i++) {
     const current = new Date(start);
     current.setUTCDate(start.getUTCDate() + i);
@@ -142,26 +153,16 @@ export const getWeekDaysArray = (startDateStr) => {
   return days;
 };
 
-/**
- * Generates an array of 42 YYYY-MM-DD strings (6 weeks) for a month view.
- * Ensures the grid always starts on a Monday.
- */
 export const getMonthDaysArray = (year, monthIndex) => {
-  // monthIndex is 0-11 (JS standard)
   const firstDay = new Date(Date.UTC(year, monthIndex, 1));
   const days = [];
-
-  // Find the Monday before or on the 1st of the month
-  let dayOfWeek = firstDay.getUTCDay() || 7; // Convert Sunday(0) to 7
+  let dayOfWeek = firstDay.getUTCDay() || 7;
   const startDate = new Date(firstDay);
   startDate.setUTCDate(firstDay.getUTCDate() - (dayOfWeek - 1));
-
-  // Generate 42 days (6 full weeks to accommodate any month shape)
   for (let i = 0; i < 42; i++) {
     const current = new Date(startDate);
     current.setUTCDate(startDate.getUTCDate() + i);
     days.push(current.toISOString().slice(0, 10));
   }
-  
   return days;
 };

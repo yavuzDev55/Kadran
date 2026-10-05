@@ -55,10 +55,10 @@ export class ConflictError extends AppError {
   }
 }
 
-export class ForbiddenError extends Error {
+// 403 - Action not permitted for this resource (e.g. toggling a non-completable task)
+export class ForbiddenError extends AppError {
   constructor(message = 'Forbidden') {
-    super(message);
+    super(403, message);
     this.name = 'ForbiddenError';
-    this.statusCode = 403;
   }
 }

@@ -58,17 +58,32 @@ export default function CalendarPage() {
     }
   };
 
-  const handleToggleCompletion = async (taskId) => {
-    setTasks(prevTasks => prevTasks.map(t => 
-      t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t
-    ));
-    try {
-      await api.patch(`/tasks/${taskId}/toggle`);
-    } catch (error) {
-      toast.error("Failed to update task status");
-      fetchTasks();
-    }
-  };
+  const handleToggleCompletion = async (taskId, occurrenceDate = null) => {
+  // Optimistic update: flip isCompleted for the matching event(s)
+  setTasks((prev) =>
+    prev.map((t) => {
+      if (t.id !== taskId) return t;
+      if (t.isRecurring && occurrenceDate) {
+        // Add or remove the date from completedDates
+        const existing = new Set(t.completedDates || []);
+        if (existing.has(occurrenceDate)) existing.delete(occurrenceDate);
+        else existing.add(occurrenceDate);
+        return { ...t, completedDates: [...existing] };
+      }
+      return { ...t, isCompleted: !t.isCompleted };
+    })
+  );
+
+  try {
+    await api.patch(`/tasks/${taskId}/toggle`, {
+      // date is required for recurring tasks
+      ...(occurrenceDate && { date: occurrenceDate }),
+    });
+  } catch (error) {
+    toast.error('Failed to update task status');
+    fetchTasks(); // revert on error
+  }
+};
 
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm("Are you sure you want to delete this task? (If it's recurring, all instances will be deleted)")) return;
@@ -203,7 +218,7 @@ export default function CalendarPage() {
             weekDays={weekDays} 
             events={filteredEvents} 
             onEventClick={setSelectedEvent} 
-            onToggle={handleToggleCompletion}
+            onToggle={(taskId, date) => handleToggleCompletion(taskId, date)}
           />
         ) : (
           <CalendarMonthView 
@@ -211,7 +226,7 @@ export default function CalendarPage() {
             events={filteredEvents}
             currentMonthString={currentMonthString}
             onEventClick={setSelectedEvent} 
-            onToggle={handleToggleCompletion}
+            onToggle={(taskId, date) => handleToggleCompletion(taskId, date)}
           />
         )}
       </div>
@@ -222,7 +237,7 @@ export default function CalendarPage() {
         onDelete={handleDeleteTask}
         onEdit={handleEditTask}
         onToggle={(taskId) => {          
-          handleToggleCompletion(taskId); 
+          handleToggleCompletion(taskId, date); 
           // Modalda anlık güncelleme için selectedEvent'i güncelle
           setSelectedEvent(prev =>      
             prev ? { ...prev, isCompleted: !prev.isCompleted } : prev 

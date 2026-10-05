@@ -19,9 +19,11 @@ enum TaskType {
 }
 
 enum TimeType {
-  TIMED
-  DEADLINE
-  DATE_RANGE
+  TIMED        // date + startTime + endTime (required)
+  TIMED_OPEN   // date + startTime, no endTime
+  DEADLINE     // date only
+  DATE_RANGE   // rangeStartDate + rangeEndDate
+  ANYTIME      // no date, no time — free-floating task
 }
 
 enum Priority {
@@ -101,6 +103,16 @@ model Task {
   recurrenceDay     Int?
 
   priority    Priority @default(MEDIUM)
+  
+  // Completability — set per task, defaults driven by type in service layer
+  isCompletable Boolean @default(true)
+
+  // Custom color — null means fall back to the type default from colors config
+  color String?
+
+  // Pinned tasks appear in the daily panel regardless of date
+  isPinned Boolean @default(false)
+
   isCompleted Boolean  @default(false)
 
   userId Int

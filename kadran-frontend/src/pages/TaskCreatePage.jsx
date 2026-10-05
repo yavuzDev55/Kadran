@@ -20,6 +20,44 @@ const DAYS_OF_WEEK = [
   { id: "SUNDAY", label: "Sunday" },
 ];
 
+// Place above the TaskCreatePage function
+const PALETTE = [
+  '#3b82f6','#ef4444','#22c55e','#94a3b8',
+  '#f59e0b','#8b5cf6','#ec4899','#14b8a6',
+  '#f97316','#64748b','#06b6d4','#a3e635',
+];
+
+function ColorPicker({ value, onChange, typeDefault }) {
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      {/* "Default" option */}
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        title="Use type default"
+        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs transition ${
+          value === null ? 'border-white' : 'border-slate-600 hover:border-slate-400'
+        }`}
+        style={{ backgroundColor: typeDefault }}
+      >
+        {value === null && <span className="text-white font-bold">✓</span>}
+      </button>
+      {PALETTE.map((hex) => (
+        <button
+          key={hex}
+          type="button"
+          onClick={() => onChange(hex)}
+          title={hex}
+          className={`w-7 h-7 rounded-full border-2 transition ${
+            value === hex ? 'border-white scale-110' : 'border-transparent hover:border-slate-400'
+          }`}
+          style={{ backgroundColor: hex }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function TaskCreatePage() {
   const navigate = useNavigate();
   const { id } = useParams(); // edit modunda dolu, yeni görevde undefined
@@ -52,6 +90,13 @@ export default function TaskCreatePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const TYPE_COLORS = {
+    COURSE: '#3b82f6', EXAM: '#ef4444', HOMEWORK: '#22c55e', CUSTOM: '#94a3b8',
+  };
+
+  const [color, setColor] = useState(null); // null = use type default
+  const [isCompletable, setIsCompletable] = useState(true);
+
   // Edit modunda mevcut görevi yükle ve form alanlarını doldur
   useEffect(() => {
     if (!isEditMode) return;
@@ -67,6 +112,8 @@ export default function TaskCreatePage() {
         setPriority(t.priority);
         setTagsInput((t.tags || []).join(", "));
         setIsRecurring(t.isRecurring);
+        setColor(t.color ?? null);
+        setIsCompletable(t.isCompletable !== false);
 
         if (t.isRecurring) {
           setRecurrencePattern(t.recurrencePattern || "WEEKLY");
@@ -114,6 +161,8 @@ export default function TaskCreatePage() {
       setTimeType("TIMED");
     } else if (typeId === "HOMEWORK") {
       setTimeType("DEADLINE");
+    } else if (typeId === "CUSTOM") {
+      setTimeType("TIMED_OPEN");
     }
   };
 
@@ -144,6 +193,8 @@ export default function TaskCreatePage() {
         priority,
         isRecurring,
         tags: formattedTags,
+        color: color,
+        isCompletable: isCompletable
       };
 
       if (isRecurring) {
@@ -330,9 +381,11 @@ export default function TaskCreatePage() {
                   disabled={selectedType !== "CUSTOM"}
                   className="w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60"
                 >
-                  <option value="TIMED">Timed (Specific Hours)</option>
-                  <option value="DEADLINE">Deadline (Date Only)</option>
+                  <option value="TIMED">Timed (start + end time)</option>
+                  <option value="TIMED_OPEN">Timed Open (start time only)</option>
+                  <option value="DEADLINE">Deadline (date only)</option>
                   <option value="DATE_RANGE">Date Range</option>
+                  <option value="ANYTIME">Anytime (no date or time)</option>
                 </select>
               </div>
             )}
@@ -524,6 +577,32 @@ export default function TaskCreatePage() {
                 </div>
               )}
 
+              {((selectedType === "CUSTOM" && timeType === "TIMED_OPEN")) && (
+                <div className="flex flex-col gap-4 p-3 bg-slate-900/50 rounded border border-slate-700/50">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Date *</label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Start Time *</label>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">No end time — task appears as an open-ended event.</p>
+                </div>
+              )}
+
               {(selectedType === "HOMEWORK" || (selectedType === "CUSTOM" && timeType === "DEADLINE")) && (
                 <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50">
                   <label className="block text-xs text-slate-400 mb-1">Due Date *</label>
@@ -583,8 +662,34 @@ export default function TaskCreatePage() {
                   </div>
                 </div>
               )}
+
+              {(selectedType === "CUSTOM" && timeType === "ANYTIME") && (
+                <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-xs text-slate-400">
+                  No date or time required. This task will appear in the "Anytime" section.
+                </div>
+              )}
             </>
           )}
+
+          {/* Color picker */}
+          <div>
+            <label className="block text-sm text-slate-400 mb-2">Task Color</label>
+            <ColorPicker value={color} onChange={setColor} typeDefault={TYPE_COLORS[selectedType]} />
+          </div>
+
+          {/* Completable toggle */}
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="isCompletable"
+              checked={isCompletable}
+              onChange={(e) => setIsCompletable(e.target.checked)}
+              className="w-4 h-4 accent-blue-600"
+            />
+            <label htmlFor="isCompletable" className="text-sm text-slate-300 cursor-pointer">
+              This task can be marked as complete
+            </label>
+          </div>
 
           <button
             type="submit"

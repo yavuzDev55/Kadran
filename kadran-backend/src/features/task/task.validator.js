@@ -6,9 +6,10 @@ import {
   MAX_RANGE_DAYS_WARNING,
   MAX_RANGE_DAYS_HARD,
 } from '../../config/limits.js';
+import { isValidColor } from '../../config/colors.js';
 
 const TASK_TYPES = ['COURSE', 'EXAM', 'HOMEWORK', 'CUSTOM'];
-const TIME_TYPES = ['TIMED', 'DEADLINE', 'DATE_RANGE'];
+const TIME_TYPES = ['TIMED', 'TIMED_OPEN', 'DEADLINE', 'DATE_RANGE', 'ANYTIME'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
 const RECURRENCE_PATTERNS = ['DAILY', 'WEEKLY', 'MONTHLY'];
 const WEEK_DAYS = [
@@ -145,6 +146,34 @@ const validateFlexibleSchedule = (body, details) => {
   });
 };
 
+const validateTimedOpen = (body, details) => {
+  if (!isValidDate(body.date)) {
+    details.date = 'date is required for TIMED_OPEN tasks';
+  }
+  if (!isValidTime(body.startTime)) {
+    details.startTime = 'startTime is required and must be in HH:MM format';
+  }
+  if (body.endTime !== undefined && body.endTime !== null) {
+    details.endTime = 'endTime must not be provided for TIMED_OPEN tasks';
+  }
+  if (body.isFlexibleSchedule) {
+    details.isFlexibleSchedule = 'isFlexibleSchedule is only allowed when timeType is TIMED';
+  }
+};
+
+const validateAnytime = (body, details) => {
+  if (body.date || body.startTime || body.endTime ||
+      body.rangeStartDate || body.rangeEndDate) {
+    details.timeType = 'ANYTIME tasks must not have date or time fields';
+  }
+  if (body.isRecurring) {
+    details.isRecurring = 'ANYTIME tasks cannot be recurring';
+  }
+  if (body.isFlexibleSchedule) {
+    details.isFlexibleSchedule = 'isFlexibleSchedule is only allowed when timeType is TIMED';
+  }
+};
+
 const validateTimed = (body, details, warnings) => {
   if (!isValidDate(body.date)) {
     details.date = 'date is required';
@@ -266,10 +295,14 @@ const validateTaskBody = (body) => {
     details.timeType = 'Invalid time type';
   } else if (body.timeType === 'TIMED') {
     validateTimed(body, details, warnings);
+  } else if (body.timeType === 'TIMED_OPEN') {
+    validateTimedOpen(body, details);
   } else if (body.timeType === 'DEADLINE') {
     validateDeadline(body, details);
   } else if (body.timeType === 'DATE_RANGE') {
     validateDateRange(body, details, warnings);
+  } else if (body.timeType === 'ANYTIME') {
+    validateAnytime(body, details);
   }
 
   if (body.priority !== undefined && !PRIORITIES.includes(body.priority)) {
@@ -278,6 +311,19 @@ const validateTaskBody = (body) => {
 
   validateRecurrence(body, details);
   validateFlexibleSchedule(body, details);
+
+    // color: must be from the preset palette if provided
+  if (body.color !== undefined && body.color !== null) {
+    if (!isValidColor(body.color)) {
+      details.color = 'color must be one of the preset palette values';
+    }
+  }
+
+  // isCompletable: boolean if provided
+  if (body.isCompletable !== undefined && typeof body.isCompletable !== 'boolean') {
+    details.isCompletable = 'isCompletable must be a boolean';
+  }
+  
   validateTags(body.tags, details);
 
   return { details, warnings };

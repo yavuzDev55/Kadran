@@ -112,7 +112,11 @@ const createEventObject = (task, dateString, dayName = null) => {
     startHourNum,
     durationNum,
     tags: task.tags || [],
-    originalTask: task
+    originalTask: task,
+    effectiveColor: task.effectiveColor || task.color || null,
+    isCompletable:  task.isCompletable !== false,
+    isPinned:       task.isPinned || false,
+    originalTask:   task, 
   };
 };
 

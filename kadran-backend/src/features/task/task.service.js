@@ -15,6 +15,7 @@ import {
   removeTagFromTask as unlinkTagFromTask,
 } from '../tag/tag.db.js';
 import { NotFoundError, AuthorizationError } from '../../shared/utils/customErrors.js';
+import { TYPE_DEFAULT_COLORS } from '../../config/colors.js';
 
 // ─── Serialize ────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ export const serializeTask = (task) => {
   return {
     ...task,
     tags: (task.tags || []).map((taskTag) => taskTag.tag.name),
+    effectiveColor: task.color ?? TYPE_DEFAULT_COLORS[task.type] ?? '#94a3b8',
   };
 };
 
@@ -53,6 +55,10 @@ const replaceTaskTags = async (taskId, currentTagIds, nextTagIds) => {
 
 // ─── buildTaskData: CREATE (tüm alanlar zorunlu) ─────────────────────────────
 
+// Default completability by task type.
+// COURSE tasks (lectures) are informational, not completable by default.
+const getDefaultCompletable = (type) => type !== 'COURSE';
+
 const buildCreateData = (body) => {
   const base = {
     title: body.title,
@@ -62,6 +68,11 @@ const buildCreateData = (body) => {
     priority: body.priority ?? 'MEDIUM',
     isFlexibleSchedule: Boolean(body.isFlexibleSchedule),
     schedulePattern: body.isFlexibleSchedule ? (body.schedulePattern ?? null) : null,
+        isCompletable: body.isCompletable !== undefined
+      ? Boolean(body.isCompletable)
+      : getDefaultCompletable(body.type),
+    color: body.color ?? null,
+    isPinned: Boolean(body.isPinned ?? false),
     isRecurring: Boolean(body.isRecurring),
     recurrencePattern: body.isRecurring ? body.recurrencePattern : null,
     recurrenceStart: body.isRecurring ? new Date(body.recurrenceStart) : null,
@@ -88,6 +99,23 @@ const buildCreateData = (body) => {
       ...base,
       date: new Date(body.date),
       startTime: null, endTime: null,
+      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
+    };
+  }
+  if (body.timeType === 'TIMED_OPEN') {
+    return {
+      ...base,
+      date: new Date(body.date),
+      startTime: body.startTime,
+      endTime: null,
+      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
+    };
+  }
+
+  if (body.timeType === 'ANYTIME') {
+    return {
+      ...base,
+      date: null, startTime: null, endTime: null,
       rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
     };
   }
@@ -119,7 +147,21 @@ const buildUpdateData = (existing, body) => {
   const newTimeType = body.timeType ?? existing.timeType;
   if (body.timeType !== undefined) data.timeType = body.timeType;
 
-  if (newTimeType === 'TIMED') {
+  if (newTimeType === 'TIMED_OPEN') {
+    if (body.date !== undefined)      data.date = new Date(body.date);
+    if (body.startTime !== undefined) data.startTime = body.startTime ?? null;
+    data.endTime = null; // endTime never set for TIMED_OPEN
+    if (body.timeType !== undefined && existing.timeType !== 'TIMED_OPEN') {
+      data.rangeStartDate = null; data.rangeStartTime = null;
+      data.rangeEndDate = null;   data.rangeEndTime = null;
+    }
+  } else if (newTimeType === 'ANYTIME') {
+    if (body.timeType !== undefined) {
+      data.date = null; data.startTime = null; data.endTime = null;
+      data.rangeStartDate = null; data.rangeStartTime = null;
+      data.rangeEndDate = null;   data.rangeEndTime = null;
+    }
+  } else if (newTimeType === 'TIMED') {
     if (body.date !== undefined)      data.date = new Date(body.date);
     if (body.startTime !== undefined) data.startTime = body.startTime ?? null;
     if (body.endTime !== undefined)   data.endTime = body.endTime ?? null;
@@ -144,6 +186,10 @@ const buildUpdateData = (existing, body) => {
       data.date = null; data.startTime = null; data.endTime = null;
     }
   }
+
+  if (body.color !== undefined)         data.color = body.color ?? null;
+  if (body.isCompletable !== undefined) data.isCompletable = Boolean(body.isCompletable);
+  if (body.isPinned !== undefined)      data.isPinned = Boolean(body.isPinned);
 
   // Recurrence: gönderildiyse güncelle
   if (body.isRecurring !== undefined) {
@@ -230,7 +276,11 @@ export const deleteTask = async (userId, taskId) => {
 };
 
 export const toggleTask = async (userId, taskId) => {
-  await assertOwnership(userId, taskId);
+  const task = await assertOwnership(userId, taskId);
+  if (!task.isCompletable) {
+    const { ForbiddenError } = await import('../../shared/utils/customErrors.js');
+    throw new ForbiddenError('This task is not completable');
+  }
   const updated = await toggleTaskRecord(taskId);
   return serializeTask(updated);
 };

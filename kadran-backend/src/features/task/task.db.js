@@ -11,7 +11,7 @@ const taskInclude = {
 // ─── Task queries ─────────────────────────────────────────────────────────────
 
 export const findTasksByUser = async (userId, filters = {}) => {
-  const { from, to, tags, type, category, priority, showCompleted, limit = 50, offset = 0 } = filters;
+  const { from, to, tags, type, category, priority, showCompleted, q, limit = 50, offset = 0 } = filters;
 
   const where = { userId };
 
@@ -36,6 +36,9 @@ export const findTasksByUser = async (userId, filters = {}) => {
   const typeFilter = type || category;
   if (typeFilter) where.type = typeFilter;
   if (priority) where.priority = priority;
+
+  // Case-insensitive title search (dashboard search panel)
+  if (q) where.title = { contains: q, mode: 'insensitive' };
 
   // showCompleted=false hides completed tasks; default is to show all
   if (showCompleted === false) where.isCompleted = false;

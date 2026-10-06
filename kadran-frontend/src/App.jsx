@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardPage from "./pages/DashboardPage";
 import TasksPage from "./pages/TasksPage";
 import TaskCreatePage from "./pages/TaskCreatePage";
 import CalendarPage from "./pages/CalendarPage";
@@ -17,6 +18,14 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
+        element: (
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "tasks",
         element: (
           <ProtectedRoute>
             <TasksPage />

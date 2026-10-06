@@ -25,6 +25,12 @@ export default function Layout() {
                     to="/" 
                     className={`px-3 py-2 rounded-md text-sm font-medium transition ${isActive('/') ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
                   >
+                    Dashboard
+                  </Link>
+                  <Link 
+                    to="/tasks" 
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition ${isActive('/tasks') ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
+                  >
                     List View
                   </Link>
                   <Link 

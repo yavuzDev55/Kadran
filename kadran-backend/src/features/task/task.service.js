@@ -347,6 +347,7 @@ export const listTasks = async (userId, query) => {
     type: query.type,
     category: query.category,
     priority: query.priority,
+    q: typeof query.q === 'string' && query.q.trim() ? query.q.trim() : undefined,
     tags: query.tags ? query.tags.split(',').map((t) => t.trim().toLowerCase()) : undefined,
     showCompleted: query.showCompleted !== 'false',
     limit: query.limit ? Number(query.limit) : 50,

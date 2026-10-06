@@ -44,6 +44,13 @@ model User {
   password String
   timeZone String @default("Europe/Istanbul")
 
+  weekStartsOn String  @default("MONDAY")   // MONDAY | SUNDAY
+  dayStartHour Int     @default(8)           // calendar grid start (0-23)
+  dayEndHour   Int     @default(22)          // calendar grid end (1-24, must be > dayStartHour)
+  timeFormat   String  @default("H24")       // H24 | H12
+  defaultView  String  @default("WEEK")      // WEEK | MONTH
+  hideCompleted Boolean @default(false)
+
   tasks Task[]
   tags  Tag[]
 

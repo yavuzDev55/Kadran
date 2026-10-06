@@ -1,3 +1,5 @@
+// src/context/AuthContext.jsx
+
 import { createContext, useContext, useState, useEffect } from "react";
 import api from "../services/api";
 
@@ -8,7 +10,6 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state from local storage on first render
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser && token) {
@@ -19,11 +20,11 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const response = await api.post("/auth/login", { email, password });
-    const { user, token } = response.data;
+    // Response format: { success, data: { user, token } }
+    const { user, token } = response.data.data;
 
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
-    
     setToken(token);
     setUser(user);
   };
@@ -35,14 +36,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Updates user in both state and localStorage after a settings save
+  const updateUser = (updatedUser) => {
+    const merged = { ...user, ...updatedUser };
+    localStorage.setItem("user", JSON.stringify(merged));
+    setUser(merged);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Custom hook to use auth context easily
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);

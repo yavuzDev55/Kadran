@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../services/api";
-// useAuth ve Link importları kaldırıldı çünkü artık bu sayfada kullanılmıyorlar
+import toast from "react-hot-toast";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -15,6 +16,8 @@ export default function TasksPage() {
   const [showCompleted, setShowCompleted] = useState(true);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   useEffect(() => {
     fetchTasks();
@@ -51,26 +54,35 @@ export default function TasksPage() {
     }
   };
 
-  const toggleTaskCompletion = async (id) => {
+  const toggleTaskCompletion = async (task) => {
+    if (task.isRecurring) {
+      toast.error("Recurring tasks must be completed per-occurrence from the Calendar page.");
+      return;
+    }
     try {
-      await api.patch(`/tasks/${id}/toggle`);
-      setTasks(tasks.map(task => 
-        task.id === id ? { ...task, isCompleted: !task.isCompleted } : task
+      await api.patch(`/tasks/${task.id}/toggle`);
+      setTasks(tasks.map((t) =>
+        t.id === task.id ? { ...t, isCompleted: !t.isCompleted } : t
       ));
     } catch (err) {
-      alert("Failed to update task status.");
+      toast.error("Failed to update task status.");
     }
   };
 
-  const deleteTask = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
-    
+  const requestDeleteTask = (taskId) => setConfirmDeleteId(taskId);
+
+  const confirmDeleteTask = async () => {
+    const taskId = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!taskId) return;
+
     try {
-      await api.delete(`/tasks/${id}`);
-      setTasks(tasks.filter(task => task.id !== id));
+      await api.delete(`/tasks/${taskId}`);
+      setTasks(tasks.filter((task) => task.id !== taskId));
       fetchTags();
+      toast.success("Task deleted.");
     } catch (err) {
-      alert("Failed to delete task.");
+      toast.error("Failed to delete task.");
     }
   };
 
@@ -85,7 +97,7 @@ export default function TasksPage() {
       setTagInputs({ ...tagInputs, [taskId]: "" });
       fetchTags();
     } catch (err) {
-      alert("Failed to add tag: " + (err.response?.data?.error?.message || "Unknown error"));
+      toast.error("Failed to add tag: " + (err.response?.data?.error?.message || "Unknown error"));
     }
   };
 
@@ -200,7 +212,7 @@ export default function TasksPage() {
                     <input 
                       type="checkbox" 
                       checked={task.isCompleted}
-                      onChange={() => toggleTaskCompletion(task.id)}
+                      onChange={() => toggleTaskCompletion(task)}
                       className="w-5 h-5 mt-1 cursor-pointer accent-blue-600"
                     />
                     <div>
@@ -260,8 +272,8 @@ export default function TasksPage() {
                     </div>
                   </div>
 
-                  <button 
-                    onClick={() => deleteTask(task.id)}
+                  <button
+                    onClick={() => requestDeleteTask(task.id)}
                     className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition"
                     title="Delete"
                   >
@@ -310,6 +322,17 @@ export default function TasksPage() {
           </ul>
         )}
       </div>
+        
+        <ConfirmDialog
+          open={confirmDeleteId !== null}
+          title="Delete task?"
+          message="This task will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDeleteTask}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+
     </div>
   );
 }

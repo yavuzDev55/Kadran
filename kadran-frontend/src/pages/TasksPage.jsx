@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { setTaskPinned } from "../services/taskService";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -66,6 +67,17 @@ export default function TasksPage() {
       ));
     } catch (err) {
       toast.error("Failed to update task status.");
+    }
+  };
+
+  const toggleTaskPin = async (task) => {
+    const next = !task.isPinned;
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isPinned: next } : t)));
+    try {
+      await setTaskPinned(task.id, next);
+    } catch (err) {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isPinned: !next } : t)));
+      toast.error("Failed to update pin.");
     }
   };
 
@@ -205,7 +217,7 @@ export default function TasksPage() {
           <p className="text-slate-400 text-center py-6">No tasks found matching your filters.</p>
         ) : (
           <ul className="flex flex-col gap-4">
-            {tasks.map((task) => (
+            {[...tasks].sort((a, b) => Number(b.isPinned) - Number(a.isPinned)).map((task) => (
               <li key={task.id} className={`p-4 rounded-md border transition ${task.isCompleted ? 'bg-slate-900/50 border-slate-800 opacity-75' : 'bg-slate-700 border-slate-600'}`}>
                 <div className="flex justify-between items-start">
                   <div className="flex items-start gap-4">
@@ -272,6 +284,14 @@ export default function TasksPage() {
                     </div>
                   </div>
 
+                  <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => toggleTaskPin(task)}
+                    className={`p-2 rounded transition hover:bg-slate-600/50 ${task.isPinned ? 'opacity-100' : 'opacity-40 grayscale hover:opacity-90'}`}
+                    title={task.isPinned ? "Unpin from dashboard" : "Pin to dashboard"}
+                  >
+                    📌
+                  </button>
                   <button
                     onClick={() => requestDeleteTask(task.id)}
                     className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition"
@@ -281,6 +301,7 @@ export default function TasksPage() {
                       <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                   </button>
+                  </div>
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-slate-600/50 flex flex-col gap-2">

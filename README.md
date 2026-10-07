@@ -9,9 +9,10 @@ sense of time.
 
 ## Features
 
-- **Dashboard (home page)** — five panels on one screen:
+- **Dashboard (home page)** — six panels on one screen:
   - **Active Now** — the task running right now, with a progress bar and remaining time
   - **Today / Next 7 Days** — tabbed agenda; the weekly tab expands recurring tasks and groups them by day
+  - **Pinned** — every task you pinned, regardless of date
   - **High Priority** — unfinished `HIGH` tasks for the next 14 days, plus undated ones
   - **Anytime Tasks** — tasks with no date and no time
   - **Search** — find tasks by name and/or task type
@@ -21,7 +22,8 @@ sense of time.
 - **Recurring tasks** — daily, weekly (chosen weekdays), or monthly (a day of the month or the last day), with an optional end date
 - **Per-occurrence completion** — completing one lecture does not complete the whole series
 - **Flexible weekly schedule** — one task with a different time slot per weekday
-- **Tags, custom colors, pinning, completability** per task
+- **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinned tasks are collected in the dashboard's Pinned panel
+- **Tags, custom colors, completability** per task
 - **User preferences** — week start, calendar hours, 12/24-hour clock, default view, hide completed, timezone
 
 **Design note:** KADRAN intentionally does **not** detect or block schedule
@@ -175,7 +177,11 @@ Non-recurring tasks use the plain `isCompleted` flag.
 
 - `isCompletable` — defaults to `false` for `COURSE`, `true` otherwise
 - `color` — optional, must come from the palette (`GET /meta/colors`); falls back to the type color
-- `isPinned` — pinned tasks appear in the dashboard's Today tab regardless of date
+- `isPinned` — pinned tasks are listed in the dashboard's Pinned panel regardless of date.
+  A pinned recurring task shows its next unfinished occurrence (within 14 days) with its date;
+  if there is none, the series is listed without a checkbox. Set it in the task form, or
+  toggle it with the 📌 button on the dashboard, in the list view (pinned tasks are sorted
+  first), and in the calendar's task detail window
 - `isFlexibleSchedule` + `schedules` — a different time slot per weekday
 
 ---
@@ -195,7 +201,7 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 | GET | `/tasks` | List tasks |
 | GET | `/tasks/:id` | Single task |
 | POST | `/tasks` | Create task |
-| PATCH | `/tasks/:id` | Update task |
+| PATCH | `/tasks/:id` | Update task; partial bodies are accepted (e.g. `{ "isPinned": true }`) |
 | DELETE | `/tasks/:id` | Delete task |
 | PATCH | `/tasks/:id/toggle` | Toggle completion; body `{ "date": "YYYY-MM-DD" }` is required for recurring tasks |
 | POST | `/tasks/:id/tags` | Add a tag by name |
@@ -227,4 +233,5 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 - The dashboard and calendar load up to 100 tasks per request.
 - A `DATE_RANGE` task is drawn on the calendar grid only on its start date.
 - On the dashboard, a timed task that crosses midnight counts as active only until midnight.
+- Completing a pinned recurring task from the Pinned panel affects only the occurrence shown there; a series with no occurrence in the next 14 days cannot be completed from the panel.
 - There is no seed script and no automated test suite yet.

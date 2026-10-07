@@ -9,7 +9,7 @@ import { taskToItem } from "../utils/dashboardUtils";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-export default function TaskSearchPanel({ todayStr, timeFormat }) {
+export default function TaskSearchPanel({ todayStr, timeFormat, onTogglePin }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
@@ -46,6 +46,15 @@ export default function TaskSearchPanel({ todayStr, timeFormat }) {
   }, [query, type, hasCriteria]);
 
   const visibleResults = hasCriteria ? results : [];
+
+  // Flip the pin locally first, then ask the page to persist it; undo on failure.
+  const handleTogglePin = async (taskId, nextValue) => {
+    const apply = (value) =>
+      setResults((prev) => prev.map((r) => (r.taskId === taskId ? { ...r, isPinned: value } : r)));
+    apply(nextValue);
+    const ok = await onTogglePin(taskId, nextValue);
+    if (!ok) apply(!nextValue);
+  };
 
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col h-full">
@@ -87,6 +96,7 @@ export default function TaskSearchPanel({ todayStr, timeFormat }) {
               todayStr={todayStr}
               timeFormat={timeFormat}
               showDate
+              onTogglePin={handleTogglePin}
               onClick={() => navigate(`/tasks/edit/${item.taskId}`)}
             />
           ))}

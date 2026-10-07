@@ -64,7 +64,8 @@ export const taskToItem = (task) => ({
   isCompletable: task.isCompletable !== false,
   isPinned: task.isPinned || false,
   effectiveColor: task.effectiveColor || task.color || null,
-  date: task.date ? task.date.slice(0, 10) : null,
+  // DATE_RANGE tasks have no `date`; use the range start so they sort and label sensibly
+  date: (task.date || task.rangeStartDate)?.slice(0, 10) ?? null,
   startTime: task.startTime || null,
   endTime: task.endTime || null,
   rangeEndDate: task.rangeEndDate ? task.rangeEndDate.slice(0, 10) : null,

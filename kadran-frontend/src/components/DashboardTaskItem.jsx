@@ -10,6 +10,7 @@ const PRIORITY_STYLES = {
 };
 
 const buildTimeLabel = (item, timeFormat) => {
+  if (item.noToggle) return "No upcoming occurrence";
   if (item.timeType === "TIMED" && item.startTime && item.endTime) {
     return `${formatTime(item.startTime, timeFormat)} - ${formatTime(item.endTime, timeFormat)}`;
   }
@@ -31,6 +32,7 @@ export default function DashboardTaskItem({
   timeFormat = "H24",
   showDate = false,
   onToggle,
+  onTogglePin,
   onClick,
 }) {
   const accentColor = item.effectiveColor || "#94a3b8";
@@ -43,6 +45,11 @@ export default function DashboardTaskItem({
     if (onToggle) onToggle(item.taskId, item.date);
   };
 
+  const handlePin = (e) => {
+    e.stopPropagation();
+    onTogglePin(item.taskId, !item.isPinned);
+  };
+
   return (
     <li
       onClick={() => onClick && onClick(item)}
@@ -51,7 +58,7 @@ export default function DashboardTaskItem({
         onClick ? "cursor-pointer hover:brightness-110" : ""
       } ${item.isCompleted ? "opacity-50" : ""}`}
     >
-      {onToggle && item.isCompletable !== false && (
+      {onToggle && !item.noToggle && item.isCompletable !== false && (
         <input
           type="checkbox"
           checked={item.isCompleted}
@@ -63,11 +70,24 @@ export default function DashboardTaskItem({
 
       <div className="min-w-0 flex-1">
         <p className={`text-sm font-semibold truncate ${item.isCompleted ? "line-through text-slate-400" : "text-slate-100"}`}>
-          {item.isPinned && <span title="Pinned" className="mr-1">📌</span>}
           {item.title}
         </p>
         <p className="text-xs text-slate-400 truncate">{meta}</p>
       </div>
+
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={handlePin}
+          title={item.isPinned ? "Unpin" : "Pin"}
+          aria-label={item.isPinned ? "Unpin task" : "Pin task"}
+          className={`text-sm shrink-0 transition ${
+            item.isPinned ? "opacity-100" : "opacity-30 hover:opacity-80 grayscale"
+          }`}
+        >
+          📌
+        </button>
+      )}
 
       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${PRIORITY_STYLES[item.priority] || PRIORITY_STYLES.MEDIUM}`}>
         {item.priority}

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
+import { setTaskPinned } from "../services/taskService";
 import { normalizeTasksToEvents } from "../utils/calendarUtils";
 import {
   addDaysToDateStr,
@@ -74,15 +75,26 @@ export default function DashboardPage() {
     // Multi-day ranges that started earlier but are still running
     const rangeItems = getOngoingRangeItems(tasks, todayStr);
 
-    // Today: today's occurrences + running ranges + non-recurring pinned tasks
-    // (pinned = show regardless of date)
+    // Today: today's occurrences + running ranges
     const todayEvents = events.filter((e) => e.date === todayStr);
     const todayBase = [...todayEvents, ...rangeItems];
-    const todayTaskIds = new Set(todayBase.map((e) => e.taskId));
+    const today = sortByTime(todayBase).filter(keep);
+
+    // Pinned: every pinned task, regardless of date. A recurring series is shown as its
+    // next unfinished occurrence (completion is per date, so a concrete date is needed to
+    // toggle it); if none falls inside the window, the series is listed without a checkbox.
     const pinnedItems = tasks
-      .filter((t) => t.isPinned && !t.isRecurring && !todayTaskIds.has(t.id))
-      .map(taskToItem);
-    const today = [...pinnedItems, ...sortByTime(todayBase)].filter(keep);
+      .filter((t) => t.isPinned)
+      .map((t) => {
+        if (!t.isRecurring) return taskToItem(t);
+        const next = sortByDateThenTime(events.filter((e) => e.taskId === t.id && !e.isCompleted))[0];
+        return next ?? { ...taskToItem(t), date: null, noToggle: true };
+      })
+      .filter(keep);
+    // Unfinished first, then by date (stable sort keeps the date order inside each group)
+    const pinned = sortByDateThenTime(pinnedItems).sort(
+      (a, b) => Number(a.isCompleted) - Number(b.isCompleted)
+    );
 
     // Week agenda: everything dated from today through weekEnd
     const week = sortByDateThenTime(
@@ -105,7 +117,7 @@ export default function DashboardPage() {
 
     const anytime = anytimeItems.filter(keep);
 
-    return { today, week, activeEvents, nextEvent, high, anytime };
+    return { today, week, pinned, activeEvents, nextEvent, high, anytime };
   }, [tasks, todayStr, nowMinutes, hideCompleted]);
 
   // Same optimistic update + rollback strategy as CalendarPage
@@ -135,9 +147,29 @@ export default function DashboardPage() {
     }
   };
 
+  // Optimistic pin/unpin. Returns true on success so callers can roll back their own copy.
+  const handleTogglePin = async (taskId, nextValue) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: nextValue } : t)));
+    try {
+      await setTaskPinned(taskId, nextValue);
+      toast.success(nextValue ? "Task pinned" : "Task unpinned");
+      return true;
+    } catch {
+      toast.error("Failed to update pin");
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: !nextValue } : t)));
+      return false;
+    }
+  };
+
   const openTask = (item) => navigate(`/tasks/edit/${item.taskId}`);
 
-  const common = { todayStr, timeFormat, onToggle: handleToggleCompletion, onItemClick: openTask };
+  const common = {
+    todayStr,
+    timeFormat,
+    onToggle: handleToggleCompletion,
+    onTogglePin: handleTogglePin,
+    onItemClick: openTask,
+  };
 
   return (
     <div className="p-2 md:p-4 pb-12">
@@ -162,7 +194,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="lg:row-span-3">
-            <TaskSearchPanel todayStr={todayStr} timeFormat={timeFormat} />
+            <TaskSearchPanel todayStr={todayStr} timeFormat={timeFormat} onTogglePin={handleTogglePin} />
           </div>
 
           <AgendaPanel
@@ -172,9 +204,14 @@ export default function DashboardPage() {
             {...common}
           />
           <TaskListPanel title="High Priority" items={panels.high} emptyMessage="No high priority tasks." showDate {...common} />
-          <div className="lg:col-span-2">
-            <TaskListPanel title="Anytime Tasks" items={panels.anytime} emptyMessage="No anytime tasks." {...common} />
-          </div>
+          <TaskListPanel
+            title="📌 Pinned"
+            items={panels.pinned}
+            emptyMessage="No pinned tasks. Use the 📌 button on any task to pin it."
+            showDate
+            {...common}
+          />
+          <TaskListPanel title="Anytime Tasks" items={panels.anytime} emptyMessage="No anytime tasks." {...common} />
         </div>
       </div>
     </div>

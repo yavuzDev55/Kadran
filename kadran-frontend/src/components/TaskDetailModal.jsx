@@ -9,7 +9,7 @@ const PRIORITY_LABELS = {
   HIGH: "High Priority",
 };
 
-export default function TaskDetailModal({ event, onClose, onDelete, onEdit, onToggle, timeFormat = "H24" }) {
+export default function TaskDetailModal({ event, onClose, onDelete, onEdit, onToggle, onTogglePin, timeFormat = "H24" }) {
   if (!event) return null;
 
   const isRecurringOccurrence = Boolean(event.originalTask?.isRecurring);
@@ -63,6 +63,11 @@ export default function TaskDetailModal({ event, onClose, onDelete, onEdit, onTo
                 {event.isCompleted && (
                   <span className="text-xs font-semibold px-2 py-0.5 rounded bg-green-900/50 text-green-300">
                     ✓ Completed
+                  </span>
+                )}
+                {event.isPinned && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-900/50 text-blue-300">
+                    📌 Pinned
                   </span>
                 )}
                 {!event.isCompletable && (
@@ -150,6 +155,14 @@ export default function TaskDetailModal({ event, onClose, onDelete, onEdit, onTo
           ) : <div />}
 
           <div className="flex gap-2">
+            {onTogglePin && (
+              <button
+                onClick={() => onTogglePin(event.taskId, !event.isPinned)}
+                className="px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition rounded border border-slate-700"
+              >
+                {event.isPinned ? "Unpin" : "📌 Pin"}
+              </button>
+            )}
             <button
               onClick={() => onDelete(event.taskId)}
               className="px-4 py-2 text-sm font-medium text-red-400 hover:text-white hover:bg-red-600 transition rounded border border-red-900/50"

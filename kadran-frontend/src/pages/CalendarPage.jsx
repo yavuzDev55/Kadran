@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import CalendarWeekView from "../components/CalendarWeekView";
 import CalendarMonthView from "../components/CalendarMonthView";
 import TaskDetailModal from "../components/TaskDetailModal";
+import { setTaskPinned } from "../services/taskService";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { normalizeTasksToEvents, getWeekDaysArray, getMonthDaysArray } from "../utils/calendarUtils";
 
@@ -110,6 +111,18 @@ export default function CalendarPage() {
       await api.patch(`/tasks/${taskId}/toggle`, date ? { date } : {});
     } catch (error) {
       toast.error("Failed to update task status");
+      fetchTasks();
+    }
+  };
+
+  const handleTogglePin = async (taskId, nextValue) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: nextValue } : t)));
+    setSelectedEvent((prev) => (prev && prev.taskId === taskId ? { ...prev, isPinned: nextValue } : prev));
+    try {
+      await setTaskPinned(taskId, nextValue);
+      toast.success(nextValue ? "Pinned to dashboard" : "Unpinned");
+    } catch (error) {
+      toast.error("Failed to update pin");
       fetchTasks();
     }
   };
@@ -277,6 +290,7 @@ export default function CalendarPage() {
         onClose={() => setSelectedEvent(null)}
         onDelete={requestDeleteTask}
         onEdit={handleEditTask}
+        onTogglePin={handleTogglePin}
         timeFormat={timeFormat}
         onToggle={(taskId, date) => {
           handleToggleCompletion(taskId, date);

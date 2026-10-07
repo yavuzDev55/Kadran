@@ -12,6 +12,7 @@ export default function AgendaPanel({
   todayStr,
   timeFormat,
   onToggle,
+  onTogglePin,
   onItemClick,
 }) {
   const [tab, setTab] = useState("today");
@@ -21,7 +22,7 @@ export default function AgendaPanel({
     { id: "week", label: `Next ${weekDays} Days`, count: weekItems.length },
   ];
 
-  const itemProps = { todayStr, timeFormat, onToggle, onClick: onItemClick };
+  const itemProps = { todayStr, timeFormat, onToggle, onTogglePin, onClick: onItemClick };
   const groups = tab === "week" ? groupItemsByDate(weekItems) : [];
   const isEmpty = tab === "today" ? todayItems.length === 0 : groups.length === 0;
 

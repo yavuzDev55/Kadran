@@ -324,6 +324,11 @@ const validateTaskBody = (body) => {
     details.isCompletable = 'isCompletable must be a boolean';
   }
   
+  // isPinned: boolean if provided
+  if (body.isPinned !== undefined && typeof body.isPinned !== 'boolean') {
+    details.isPinned = 'isPinned must be a boolean';
+  }
+
   validateTags(body.tags, details);
 
   return { details, warnings };
@@ -376,6 +381,11 @@ export const updateTask = (req, res, next) => {
         details.endTime = 'endTime must be in HH:MM format';
       }
     }
+  }
+
+  // isPinned gönderildiyse boolean olmalı
+  if (body.isPinned !== undefined && typeof body.isPinned !== 'boolean') {
+    details.isPinned = 'isPinned must be a boolean';
   }
 
   // Recurrence gönderildiyse kontrol et

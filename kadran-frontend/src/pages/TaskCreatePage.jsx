@@ -96,6 +96,7 @@ export default function TaskCreatePage() {
 
   const [color, setColor] = useState(null); // null = use type default
   const [isCompletable, setIsCompletable] = useState(true);
+  const [isPinned, setIsPinned] = useState(false);
 
   // Edit modunda mevcut görevi yükle ve form alanlarını doldur
   useEffect(() => {
@@ -114,6 +115,7 @@ export default function TaskCreatePage() {
         setIsRecurring(t.isRecurring);
         setColor(t.color ?? null);
         setIsCompletable(t.isCompletable !== false);
+        setIsPinned(t.isPinned === true);
 
         if (t.isRecurring) {
           setRecurrencePattern(t.recurrencePattern || "WEEKLY");
@@ -194,7 +196,8 @@ export default function TaskCreatePage() {
         isRecurring,
         tags: formattedTags,
         color: color,
-        isCompletable: isCompletable
+        isCompletable: isCompletable,
+        isPinned: isPinned
       };
 
       if (isRecurring) {
@@ -688,6 +691,20 @@ export default function TaskCreatePage() {
             />
             <label htmlFor="isCompletable" className="text-sm text-slate-300 cursor-pointer">
               This task can be marked as complete
+            </label>
+          </div>
+
+          {/* Pin toggle */}
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="isPinned"
+              checked={isPinned}
+              onChange={(e) => setIsPinned(e.target.checked)}
+              className="w-4 h-4 accent-blue-600"
+            />
+            <label htmlFor="isPinned" className="text-sm text-slate-300 cursor-pointer">
+              📌 Pin this task (listed in the dashboard's Pinned panel)
             </label>
           </div>
 

@@ -1,5 +1,7 @@
 // ============================================================
-// FINAL v3 SCHEMA — this is the target/end state.
+// v4 SCHEMA
+//  - time models: TIMED, OPEN_ENDED, MULTI_DAY, ANY_TIME, DEADLINE
+//  - a recurring task is a TaskSeries (the rule) + one real Task row per occurrence
 // ============================================================
 
 generator client {
@@ -18,12 +20,13 @@ enum TaskType {
   CUSTOM
 }
 
+// The order mirrors the database (values were renamed in place by the v4 migration).
 enum TimeType {
-  TIMED        // date + startTime + endTime (required)
-  TIMED_OPEN   // date + startTime, no endTime
-  DEADLINE     // date only
-  DATE_RANGE   // rangeStartDate + rangeEndDate
-  ANYTIME      // no date, no time — free-floating task
+  TIMED      // date + startTime + endTime
+  DEADLINE   // date + endTime (the due time, defaults to 23:59)
+  MULTI_DAY  // rangeStartDate + rangeEndDate (whole days; same day twice = one-day task)
+  OPEN_ENDED // date + startTime, no end
+  ANY_TIME   // no date, no time — never placed on the calendar
 }
 
 enum Priority {
@@ -44,15 +47,16 @@ model User {
   password String
   timeZone String @default("Europe/Istanbul")
 
-  weekStartsOn String  @default("MONDAY")   // MONDAY | SUNDAY
-  dayStartHour Int     @default(8)           // calendar grid start (0-23)
-  dayEndHour   Int     @default(22)          // calendar grid end (1-24, must be > dayStartHour)
-  timeFormat   String  @default("H24")       // H24 | H12
-  defaultView  String  @default("WEEK")      // WEEK | MONTH
+  weekStartsOn  String  @default("MONDAY") // MONDAY | SUNDAY
+  dayStartHour  Int     @default(8) // calendar grid start (0-23)
+  dayEndHour    Int     @default(22) // calendar grid end (1-24, must be > dayStartHour)
+  timeFormat    String  @default("H24") // H24 | H12
+  defaultView   String  @default("WEEK") // WEEK | MONTH
   hideCompleted Boolean @default(false)
 
-  tasks Task[]
-  tags  Tag[]
+  tasks  Task[]
+  tags   Tag[]
+  series TaskSeries[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,6 +78,27 @@ model Tag {
   @@map("tags")
 }
 
+// The rule behind a recurring task. Occurrences are generated once, when the series is
+// created, and stored as ordinary tasks (Task.seriesId). Deleting the series deletes them.
+model TaskSeries {
+  id        Int               @id @default(autoincrement())
+  pattern   RecurrencePattern
+  startDate DateTime          @db.Date
+  endDate   DateTime          @db.Date // required, at most 1 year after startDate
+  weekDays  String? // WEEKLY: "MONDAY,WEDNESDAY"
+  monthDay  Int? // MONTHLY: 1-31, or -1 for the last day of the month
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tasks Task[]
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("task_series")
+}
+
 model Task {
   id          Int     @id @default(autoincrement())
   title       String
@@ -82,50 +107,38 @@ model Task {
   type     TaskType
   timeType TimeType
 
-  // Shared by TIMED / DEADLINE; null for DATE_RANGE
+  // TIMED / OPEN_ENDED / DEADLINE: the day. null for MULTI_DAY and ANY_TIME.
   date DateTime?
 
-  // TIMED fields (unused when isFlexibleSchedule is true, see schedules)
+  // TIMED: startTime + endTime. OPEN_ENDED: startTime. DEADLINE: endTime (due time).
   startTime String?
   endTime   String?
 
-  // DATE_RANGE fields
+  // MULTI_DAY: whole days, both ends inclusive
   rangeStartDate DateTime?
-  rangeStartTime String?
   rangeEndDate   DateTime?
-  rangeEndTime   String?
 
-  // Flexible weekly schedule — out of scope in the official v3.0 doc
-  // (§11.2), included at the user's request.
-  isFlexibleSchedule Boolean        @default(false)
-  schedulePattern    String?
-  schedules          TaskSchedule[]
+  priority Priority @default(MEDIUM)
 
-  // Recurrence (unchanged from v2)
-  isRecurring       Boolean            @default(false)
-  recurrencePattern RecurrencePattern?
-  recurrenceStart   DateTime?
-  recurrenceEnd     DateTime?
-  recurrenceDays    String?
-  recurrenceDay     Int?
-
-  priority    Priority @default(MEDIUM)
-  
-  // Completability — set per task, defaults driven by type in service layer
+  // Defaults come from the task type (see task.rules.js)
   isCompletable Boolean @default(true)
 
   // Custom color — null means fall back to the type default from colors config
   color String?
 
-  // Pinned tasks appear in the daily panel regardless of date
+  // Pinned tasks are listed in the dashboard's Pinned panel regardless of date.
+  // For a series the flag is kept identical on every occurrence.
   isPinned Boolean @default(false)
 
-  isCompleted Boolean  @default(false)
+  isCompleted Boolean @default(false)
 
   userId Int
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags   TaskTag[]
-  completions TaskCompletion[]
+
+  // Set when this task is one occurrence of a recurring series
+  seriesId Int?
+  series   TaskSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,21 +147,8 @@ model Task {
   @@index([date])
   @@index([rangeStartDate])
   @@index([rangeEndDate])
+  @@index([seriesId])
   @@map("tasks")
-}
-
-model TaskSchedule {
-  id        Int    @id @default(autoincrement())
-  dayOfWeek String // MONDAY..SUNDAY
-  startTime String // HH:MM
-  endTime   String // HH:MM
-
-  taskId Int
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, dayOfWeek])
-  @@index([taskId])
-  @@map("task_schedules")
 }
 
 model TaskTag {
@@ -164,18 +164,4 @@ model TaskTag {
   @@index([taskId])
   @@index([tagId])
   @@map("task_tags")
-}
-
-model TaskCompletion {
-  id             Int      @id @default(autoincrement())
-  occurrenceDate DateTime @db.Date
-
-  taskId Int
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  completedAt DateTime @default(now())
-
-  @@unique([taskId, occurrenceDate])
-  @@index([taskId])
-  @@map("task_completions")
 }

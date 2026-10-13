@@ -1,81 +1,82 @@
 // src/components/ActiveTaskPanel.jsx
+// Slim "active now" strip. Only TIMED tasks (running between start and end) and MULTI_DAY tasks
+// (today inside the day range) count. With nothing active it shows the next task of today, and
+// disappears when there is nothing to show.
 
 import { formatTime } from "../utils/formatTime";
-import { getEventWindow } from "../utils/dashboardUtils";
+import { getMultiDayProgress } from "../utils/dashboardUtils";
+import { timeToMinutes } from "../utils/dateUtils";
 
-function ActiveTaskCard({ event, nowMinutes, timeFormat, onToggle }) {
-  const window = getEventWindow(event);
-  const accentColor = event.effectiveColor || "#3b82f6";
-  const hasEnd = window.end !== null;
+function ActiveChip({ item, todayStr, nowMinutes, timeFormat, onClick }) {
+  const accent = item.effectiveColor || "#3b82f6";
+  let status;
+  let progress;
 
-  const progress = hasEnd
-    ? Math.min(100, Math.max(0, Math.round(((nowMinutes - window.start) / (window.end - window.start)) * 100)))
-    : null;
-
-  const statusText = hasEnd
-    ? `${window.end - nowMinutes} min remaining`
-    : `Started ${nowMinutes - window.start} min ago`;
+  if (item.timeType === "MULTI_DAY") {
+    const { day, total, daysLeft } = getMultiDayProgress(item, todayStr);
+    status = total === 1 ? "All day" : `Day ${day} of ${total} · ${daysLeft === 0 ? "last day" : `${daysLeft} left`}`;
+    progress = Math.round((day / total) * 100);
+  } else {
+    const start = timeToMinutes(item.startTime);
+    const end = timeToMinutes(item.endTime);
+    const length = end > start ? end - start : 24 * 60 - start;
+    const left = (end > start ? end : 24 * 60) - nowMinutes;
+    status = `${formatTime(item.startTime, timeFormat)} – ${formatTime(item.endTime, timeFormat)} · ${left} min left`;
+    progress = Math.min(100, Math.max(0, Math.round(((nowMinutes - start) / length) * 100)));
+  }
 
   return (
-    <div style={{ borderLeftColor: accentColor }} className="border-l-4 pl-3">
-      <div className="flex items-center gap-3">
-        {event.isCompletable !== false && (
-          <input
-            type="checkbox"
-            checked={event.isCompleted}
-            onChange={() => onToggle(event.taskId, event.date)}
-            className="w-4 h-4 cursor-pointer accent-green-500"
-            title="Mark as completed"
-          />
-        )}
-        <h3 className="text-lg font-bold text-slate-100">{event.title}</h3>
+    <button
+      type="button"
+      onClick={() => onClick(item)}
+      style={{ borderLeftColor: accent }}
+      className="text-left min-w-[220px] flex-1 bg-slate-800/80 border border-slate-700/60 border-l-4 rounded px-3 py-2 hover:brightness-110 transition"
+    >
+      <p className="text-sm font-semibold text-slate-100 truncate">{item.title}</p>
+      <p className="text-xs text-slate-400 truncate">{status}</p>
+      <div className="h-1 bg-slate-700 rounded-full overflow-hidden mt-1.5">
+        <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
       </div>
-
-      <p className="text-xs text-slate-400 mt-1">
-        {formatTime(event.startTime, timeFormat)}
-        {event.endTime ? ` - ${formatTime(event.endTime, timeFormat)}` : ""} · {event.type}
-      </p>
-
-      {progress !== null && (
-        <div className="h-2 bg-slate-700 rounded-full overflow-hidden mt-3">
-          <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      <p className="text-xs text-slate-300 mt-1.5">{statusText}</p>
-    </div>
+    </button>
   );
 }
 
-export default function ActiveTaskPanel({ activeEvents, nextEvent, nowMinutes, timeFormat, onToggle }) {
+export default function ActiveTaskPanel({ activeItems, nextItem, todayStr, nowMinutes, timeFormat, onItemClick }) {
+  if (activeItems.length === 0 && !nextItem) return null;
+
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 h-full">
-      <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
-        Active Now
-        {activeEvents.length > 0 && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+    <section className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 flex flex-wrap items-center gap-3">
+      <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 shrink-0">
+        {activeItems.length > 0 ? "Active now" : "Up next"}
+        {activeItems.length > 0 && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
       </h2>
 
-      {activeEvents.length === 0 ? (
-        <div className="py-2">
-          <p className="text-sm text-slate-500 italic">No active task right now.</p>
-          {nextEvent && (
-            <p className="text-xs text-slate-400 mt-2">
-              Next: <span className="text-slate-200 font-semibold">{nextEvent.title}</span> at{" "}
-              {formatTime(nextEvent.startTime, timeFormat)}
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {activeEvents.map((event) => (
-            <ActiveTaskCard
-              key={event.id}
-              event={event}
+      {activeItems.length > 0 ? (
+        <div className="flex flex-wrap gap-2 flex-1">
+          {activeItems.map((item) => (
+            <ActiveChip
+              key={item.id}
+              item={item}
+              todayStr={todayStr}
               nowMinutes={nowMinutes}
               timeFormat={timeFormat}
-              onToggle={onToggle}
+              onClick={onItemClick}
             />
           ))}
         </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onItemClick(nextItem)}
+          className="text-sm text-slate-300 hover:text-white text-left"
+        >
+          <span className="font-semibold text-slate-100">{nextItem.title}</span>
+          <span className="text-slate-400">
+            {" "}
+            at{" "}
+            {formatTime(nextItem.timeType === "DEADLINE" ? nextItem.endTime : nextItem.startTime, timeFormat)}
+          </span>
+        </button>
       )}
     </section>
   );

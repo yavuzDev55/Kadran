@@ -1,6 +1,6 @@
 // src/pages/CalendarPage.jsx
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
@@ -8,182 +8,232 @@ import { useAuth } from "../context/AuthContext";
 import CalendarWeekView from "../components/CalendarWeekView";
 import CalendarMonthView from "../components/CalendarMonthView";
 import TaskDetailModal from "../components/TaskDetailModal";
-import { setTaskPinned } from "../services/taskService";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { normalizeTasksToEvents, getWeekDaysArray, getMonthDaysArray } from "../utils/calendarUtils";
+import FilterSidebar from "../components/FilterSidebar";
+import { setTaskPinned } from "../services/taskService";
+import { buildCalendarItems } from "../utils/calendarUtils";
+import {
+  addDays,
+  getMonthDaysArray,
+  getTodayInTimezone,
+  getWeekDaysArray,
+  parseDate,
+  shiftMonth,
+  startOfWeek,
+} from "../utils/dateUtils";
+import { DEFAULT_FILTERS } from "../utils/filters";
 
 const VIEW_STORAGE_KEY = "kadran_calendar_view";
 
-const getStartOfWeek = (dateObj, weekStartsOn) => {
-  const utcDay = dateObj.getUTCDay();
-  const result = new Date(dateObj);
-  if (weekStartsOn === "SUNDAY") {
-    result.setUTCDate(dateObj.getUTCDate() - utcDay);
-  } else {
-    const diff = utcDay === 0 ? 6 : utcDay - 1;
-    result.setUTCDate(dateObj.getUTCDate() - diff);
+// ANY_TIME tasks never appear on the calendar, so they are not offered as a filter
+const CALENDAR_TIME_TYPES = ["TIMED", "OPEN_ENDED", "MULTI_DAY", "DEADLINE"];
+
+const readStoredView = () => {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY);
+  } catch {
+    return null;
   }
-  return result.toISOString().slice(0, 10);
 };
 
 export default function CalendarPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const timeZone = user?.timeZone || "Europe/Istanbul";
   const weekStartsOn = user?.weekStartsOn || "MONDAY";
   const dayStartHour = user?.dayStartHour ?? 8;
-  const dayEndHour   = user?.dayEndHour ?? 22;
-  const timeFormat   = user?.timeFormat || "H24";
+  const dayEndHour = user?.dayEndHour ?? 22;
+  const timeFormat = user?.timeFormat || "H24";
+  const hideCompletedPref = user?.hideCompleted || false;
 
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // "Today" always comes from the user's own timezone, never from the browser's
+  const today = getTodayInTimezone(timeZone);
 
-  // FIX: view now persists across page reloads via localStorage.
-  // Priority: last view the user was on > defaultView preference > "week".
-  // Once the user has switched tabs at least once, that choice sticks —
-  // a reload no longer snaps back to the preference.
+  // Last view the user was on > defaultView preference > week
   const [view, setViewState] = useState(() => {
-    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    const stored = readStoredView();
     if (stored === "week" || stored === "month") return stored;
     return user?.defaultView === "MONTH" ? "month" : "week";
   });
 
   const setView = (next) => {
     setViewState(next);
-    localStorage.setItem(VIEW_STORAGE_KEY, next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // storage unavailable: the view just is not remembered
+    }
   };
 
-  const [referenceDate, setReferenceDate] = useState(() => new Date());
+  // The day the visible week / month is derived from ('YYYY-MM-DD')
+  const [anchor, setAnchor] = useState(() => getTodayInTimezone(timeZone));
   const [selectedEvent, setSelectedEvent] = useState(null);
+  // { kind: "task" | "series", id, label } while the delete dialog is open
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  // FIX: browser's native confirm() replaced with an in-app dialog.
-  // confirmDeleteId holds the taskId pending deletion; null means closed.
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const defaultFilters = useMemo(
+    () => ({ ...DEFAULT_FILTERS, showCompleted: !hideCompletedPref }),
+    [hideCompletedPref]
+  );
+  const [filters, setFilters] = useState(defaultFilters);
 
-  const [filterType, setFilterType] = useState("ALL");
-  const [filterPriority, setFilterPriority] = useState("ALL");
-  const [hideCompleted, setHideCompleted] = useState(() => user?.hideCompleted || false);
+  // ── Visible range ──
+  const weekDays = useMemo(() => getWeekDaysArray(startOfWeek(anchor, weekStartsOn)), [anchor, weekStartsOn]);
+  const anchorYear = Number(anchor.slice(0, 4));
+  const anchorMonthIndex = Number(anchor.slice(5, 7)) - 1;
+  const monthDays = useMemo(
+    () => getMonthDaysArray(anchorYear, anchorMonthIndex, weekStartsOn),
+    [anchorYear, anchorMonthIndex, weekStartsOn]
+  );
+  const currentMonthString = anchor.slice(0, 7);
 
-  const currentWeekStart = getStartOfWeek(referenceDate, weekStartsOn);
-  const weekDays = getWeekDaysArray(currentWeekStart);
+  const viewStart = view === "week" ? weekDays[0] : monthDays[0];
+  const viewEnd = view === "week" ? weekDays[6] : monthDays[monthDays.length - 1];
 
-  const currentYear = referenceDate.getUTCFullYear();
-  const currentMonthIndex = referenceDate.getUTCMonth();
-  const monthDays = getMonthDaysArray(currentYear, currentMonthIndex, weekStartsOn);
-  const currentMonthString = referenceDate.toISOString().slice(0, 7);
+  // ── Data ──
+  // The loaded tasks remember which range they belong to; "loading" is simply "the data on
+  // screen is for another range" (so nothing sets state synchronously inside the effect).
+  const [reloadTick, setReloadTick] = useState(0);
+  const rangeKey = `${viewStart}|${viewEnd}|${reloadTick}`;
+  const [data, setData] = useState({ key: null, tasks: [] });
+  const tasks = data.tasks;
+  const loading = data.key !== rangeKey;
 
-  const viewStartDate = view === "week" ? weekDays[0] : monthDays[0];
-  const viewEndDate = view === "week" ? weekDays[6] : monthDays[41];
+  const setTasks = (updater) =>
+    setData((prev) => ({ ...prev, tasks: typeof updater === "function" ? updater(prev.tasks) : updater }));
+  const reloadTasks = () => setReloadTick((tick) => tick + 1);
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get("/tasks", {
-        params: { limit: 100, showCompleted: true },
-      });
-      setTasks(response.data.data || []);
-    } catch (error) {
-      toast.error("Failed to load tasks");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleCompletion = async (taskId, date = null) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        if (t.isRecurring && date) {
-          const existing = new Set(t.completedDates || []);
-          if (existing.has(date)) existing.delete(date);
-          else existing.add(date);
-          return { ...t, completedDates: [...existing] };
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await api.get("/tasks", {
+          params: { from: viewStart, to: viewEnd, limit: 500, showCompleted: true },
+        });
+        if (!cancelled) setData({ key: rangeKey, tasks: response.data.data || [] });
+      } catch {
+        if (!cancelled) {
+          toast.error("Failed to load tasks");
+          setData({ key: rangeKey, tasks: [] });
         }
-        return { ...t, isCompleted: !t.isCompleted };
-      })
-    );
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewStart, viewEnd, rangeKey]);
 
+  // ── Actions ──
+  const patchTask = (taskId, patch) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+    setSelectedEvent((prev) => (prev && prev.taskId === taskId ? { ...prev, ...patch } : prev));
+  };
+
+  const handleToggleCompletion = async (event) => {
+    const next = !event.isCompleted;
+    patchTask(event.taskId, { isCompleted: next });
     try {
-      await api.patch(`/tasks/${taskId}/toggle`, date ? { date } : {});
-    } catch (error) {
+      await api.patch(`/tasks/${event.taskId}/toggle`);
+    } catch {
+      patchTask(event.taskId, { isCompleted: !next });
       toast.error("Failed to update task status");
-      fetchTasks();
     }
   };
 
-  const handleTogglePin = async (taskId, nextValue) => {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: nextValue } : t)));
-    setSelectedEvent((prev) => (prev && prev.taskId === taskId ? { ...prev, isPinned: nextValue } : prev));
+  // Pinning a series pins every occurrence
+  const handleTogglePin = async (event, nextValue) => {
+    const apply = (value) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === event.taskId || (event.seriesId != null && t.seriesId === event.seriesId)
+            ? { ...t, isPinned: value }
+            : t
+        )
+      );
+      setSelectedEvent((prev) => (prev && prev.taskId === event.taskId ? { ...prev, isPinned: value } : prev));
+    };
+    apply(nextValue);
     try {
-      await setTaskPinned(taskId, nextValue);
+      await setTaskPinned(event.taskId, nextValue);
       toast.success(nextValue ? "Pinned to dashboard" : "Unpinned");
-    } catch (error) {
+    } catch {
+      apply(!nextValue);
       toast.error("Failed to update pin");
-      fetchTasks();
     }
   };
 
-  // Opens the confirm dialog instead of deleting immediately.
-  const requestDeleteTask = (taskId) => setConfirmDeleteId(taskId);
+  const requestDelete = (event, scope) => {
+    if (scope === "series" && event.seriesId != null) {
+      setPendingDelete({ kind: "series", id: event.seriesId, label: event.title });
+    } else {
+      setPendingDelete({ kind: "task", id: event.taskId, label: event.title, inSeries: event.seriesId != null });
+    }
+  };
 
-  const cancelDeleteTask = () => setConfirmDeleteId(null);
-
-  const confirmDeleteTask = async () => {
-    const taskId = confirmDeleteId;
-    setConfirmDeleteId(null);
-    if (!taskId) return;
-
+  const confirmDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
     try {
-      await api.delete(`/tasks/${taskId}`);
-      toast.success("Task deleted successfully");
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (target.kind === "series") await api.delete(`/series/${target.id}`);
+      else await api.delete(`/tasks/${target.id}`);
+      toast.success(target.kind === "series" ? "Series deleted" : "Task deleted");
       setSelectedEvent(null);
-    } catch (error) {
-      toast.error("Failed to delete task");
+      reloadTasks();
+    } catch {
+      toast.error("Failed to delete");
     }
   };
 
-  const handleEditTask = (taskId) => {
+  const handleEdit = (event, scope) => {
     setSelectedEvent(null);
-    navigate(`/tasks/edit/${taskId}`);
+    navigate(scope === "series" ? `/tasks/edit/${event.taskId}?scope=series` : `/tasks/edit/${event.taskId}`);
   };
 
-  const allEvents = normalizeTasksToEvents(tasks, viewStartDate, viewEndDate);
+  // ── Filtering (the range is already loaded, so this is client-side) ──
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (filters.type && task.type !== filters.type) return false;
+        if (filters.timeType && task.timeType !== filters.timeType) return false;
+        if (filters.priority && task.priority !== filters.priority) return false;
+        if (!filters.showCompleted && task.isCompleted) return false;
+        if (filters.pinnedOnly && !task.isPinned) return false;
+        if (filters.tags.length > 0 && !filters.tags.some((tag) => (task.tags || []).includes(tag))) return false;
+        return true;
+      }),
+    [tasks, filters]
+  );
 
-  const filteredEvents = allEvents.filter((event) => {
-    if (filterType !== "ALL" && event.type !== filterType) return false;
-    if (filterPriority !== "ALL" && event.priority !== filterPriority) return false;
-    if (hideCompleted && event.isCompleted) return false;
-    return true;
-  });
+  const { events, spans } = useMemo(
+    () => buildCalendarItems(visibleTasks, viewStart, viewEnd),
+    [visibleTasks, viewStart, viewEnd]
+  );
 
-  const handlePrevious = () => {
-    const d = new Date(referenceDate);
-    if (view === "week") d.setUTCDate(d.getUTCDate() - 7);
-    else d.setUTCMonth(d.getUTCMonth() - 1);
-    setReferenceDate(d);
-  };
+  // ── Navigation ──
+  const handlePrevious = () => setAnchor((a) => (view === "week" ? addDays(a, -7) : shiftMonth(a, -1)));
+  const handleNext = () => setAnchor((a) => (view === "week" ? addDays(a, 7) : shiftMonth(a, 1)));
+  const handleGoToToday = () => setAnchor(today);
 
-  const handleNext = () => {
-    const d = new Date(referenceDate);
-    if (view === "week") d.setUTCDate(d.getUTCDate() + 7);
-    else d.setUTCMonth(d.getUTCMonth() + 1);
-    setReferenceDate(d);
-  };
+  const navLabel =
+    view === "week"
+      ? `${weekDays[0]} — ${weekDays[6]}`
+      : new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(parseDate(anchor));
 
-  const handleGoToToday = () => setReferenceDate(new Date());
-
-  const getNavLabel = () => {
-    if (view === "week") return `${weekDays[0]} — ${weekDays[6]}`;
-    return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(referenceDate);
-  };
-
-  // Used to tailor the confirm dialog's message for recurring series
-  const taskPendingDelete = tasks.find((t) => t.id === confirmDeleteId);
+  const deleteTitle =
+    pendingDelete?.kind === "series"
+      ? "Delete the whole series?"
+      : pendingDelete?.inSeries
+        ? "Delete this occurrence?"
+        : "Delete task?";
+  const deleteMessage =
+    pendingDelete?.kind === "series"
+      ? `“${pendingDelete?.label}” and every one of its occurrences will be permanently deleted.`
+      : pendingDelete?.inSeries
+        ? "Only this occurrence is removed; the rest of the series stays. This cannot be undone."
+        : "This task will be permanently deleted. This cannot be undone.";
 
   return (
     <div className="flex flex-col w-full mx-auto p-2 md:p-4 pb-12">
@@ -192,126 +242,109 @@ export default function CalendarPage() {
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex bg-slate-800 p-1 rounded border border-slate-700">
-            <button
-              onClick={() => setView("week")}
-              className={`px-4 py-1 text-sm font-semibold rounded transition ${view === "week" ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setView("month")}
-              className={`px-4 py-1 text-sm font-semibold rounded transition ${view === "month" ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Month
-            </button>
+            {["week", "month"].map((option) => (
+              <button
+                key={option}
+                onClick={() => setView(option)}
+                className={`px-4 py-1 text-sm font-semibold rounded transition capitalize ${
+                  view === option ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={handleGoToToday} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-600 transition text-sm font-semibold">
+            <button
+              onClick={handleGoToToday}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-600 transition text-sm font-semibold"
+            >
               Today
             </button>
             <div className="flex items-center bg-slate-800 rounded border border-slate-600 overflow-hidden">
-              <button onClick={handlePrevious} className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition">&lt;</button>
-              <span className="px-4 text-sm font-semibold text-slate-200 min-w-[180px] text-center">
-                {getNavLabel()}
-              </span>
-              <button onClick={handleNext} className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition">&gt;</button>
+              <button
+                onClick={handlePrevious}
+                className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition"
+                aria-label="Previous"
+              >
+                &lt;
+              </button>
+              <span className="px-4 text-sm font-semibold text-slate-200 min-w-[180px] text-center">{navLabel}</span>
+              <button
+                onClick={handleNext}
+                className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition"
+                aria-label="Next"
+              >
+                &gt;
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-2.5 bg-slate-800/40 border border-slate-700/60 rounded-lg">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Filters:</span>
+      <div className="flex flex-col md:flex-row gap-4 items-start">
+        <FilterSidebar
+          filters={filters}
+          onChange={setFilters}
+          onReset={() => setFilters(defaultFilters)}
+          sections={{ timeType: CALENDAR_TIME_TYPES }}
+        />
 
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
-        >
-          <option value="ALL">All Types</option>
-          <option value="COURSE">Course</option>
-          <option value="EXAM">Exam</option>
-          <option value="HOMEWORK">Homework</option>
-          <option value="CUSTOM">Custom</option>
-        </select>
+        <div className="relative flex-1 min-w-0 w-full">
+          {loading && (
+            <div className="absolute inset-0 bg-slate-900/50 z-30 flex items-center justify-center animate-pulse text-blue-400">
+              Loading...
+            </div>
+          )}
 
-        <select
-          value={filterPriority}
-          onChange={(e) => setFilterPriority(e.target.value)}
-          className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
-        >
-          <option value="ALL">All Priorities</option>
-          <option value="HIGH">High Priority</option>
-          <option value="MEDIUM">Medium Priority</option>
-          <option value="LOW">Low Priority</option>
-        </select>
-
-        <label className="flex items-center gap-2 ml-auto cursor-pointer hover:bg-slate-800 p-1.5 rounded transition">
-          <input
-            type="checkbox"
-            checked={hideCompleted}
-            onChange={(e) => setHideCompleted(e.target.checked)}
-            className="w-4 h-4 accent-blue-500 cursor-pointer rounded"
-          />
-          <span className="text-sm font-medium text-slate-300">Hide Completed</span>
-        </label>
-      </div>
-
-      <div className="relative mt-2">
-        {loading && <div className="absolute inset-0 bg-slate-900/50 z-30 flex items-center justify-center animate-pulse text-blue-400">Loading...</div>}
-
-        {view === "week" ? (
-          <CalendarWeekView
-            weekDays={weekDays}
-            events={filteredEvents}
-            onEventClick={setSelectedEvent}
-            onToggle={handleToggleCompletion}
-            startHour={dayStartHour}
-            endHour={dayEndHour}
-            weekStartsOn={weekStartsOn}
-            timeFormat={timeFormat}
-          />
-        ) : (
-          <CalendarMonthView
-            monthDays={monthDays}
-            events={filteredEvents}
-            currentMonthString={currentMonthString}
-            onEventClick={setSelectedEvent}
-            onToggle={handleToggleCompletion}
-            weekStartsOn={weekStartsOn}
-            timeFormat={timeFormat}
-          />
-        )}
+          {view === "week" ? (
+            <CalendarWeekView
+              weekDays={weekDays}
+              events={events}
+              spans={spans}
+              today={today}
+              onEventClick={setSelectedEvent}
+              onToggle={handleToggleCompletion}
+              startHour={dayStartHour}
+              endHour={dayEndHour}
+              weekStartsOn={weekStartsOn}
+              timeFormat={timeFormat}
+            />
+          ) : (
+            <CalendarMonthView
+              monthDays={monthDays}
+              events={events}
+              spans={spans}
+              currentMonthString={currentMonthString}
+              today={today}
+              onEventClick={setSelectedEvent}
+              onToggle={handleToggleCompletion}
+              weekStartsOn={weekStartsOn}
+              timeFormat={timeFormat}
+            />
+          )}
+        </div>
       </div>
 
       <TaskDetailModal
         event={selectedEvent}
         onClose={() => setSelectedEvent(null)}
-        onDelete={requestDeleteTask}
-        onEdit={handleEditTask}
+        onDelete={requestDelete}
+        onEdit={handleEdit}
         onTogglePin={handleTogglePin}
+        onToggle={handleToggleCompletion}
         timeFormat={timeFormat}
-        onToggle={(taskId, date) => {
-          handleToggleCompletion(taskId, date);
-          setSelectedEvent((prev) =>
-            prev ? { ...prev, isCompleted: !prev.isCompleted } : prev
-          );
-        }}
       />
 
       <ConfirmDialog
-        open={confirmDeleteId !== null}
-        title={taskPendingDelete?.isRecurring ? "Delete recurring series?" : "Delete task?"}
-        message={
-          taskPendingDelete?.isRecurring
-            ? "This will permanently delete the entire recurring series, including all past and future occurrences. This cannot be undone."
-            : "This task will be permanently deleted. This cannot be undone."
-        }
+        open={pendingDelete !== null}
+        title={deleteTitle}
+        message={deleteMessage}
         confirmLabel="Delete"
         danger
-        onConfirm={confirmDeleteTask}
-        onCancel={cancelDeleteTask}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

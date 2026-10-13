@@ -1,7 +1,8 @@
 // src/components/DashboardTaskItem.jsx
 
-import { formatTime } from "../utils/formatTime";
+import { formatTaskTime } from "../utils/formatTime";
 import { formatDateLabel } from "../utils/dashboardUtils";
+import { TASK_TYPES } from "../utils/taskRules";
 
 const PRIORITY_STYLES = {
   HIGH: "bg-red-900/50 text-red-300",
@@ -9,22 +10,7 @@ const PRIORITY_STYLES = {
   LOW: "bg-slate-700 text-slate-300",
 };
 
-const buildTimeLabel = (item, timeFormat) => {
-  if (item.noToggle) return "No upcoming occurrence";
-  if (item.timeType === "TIMED" && item.startTime && item.endTime) {
-    return `${formatTime(item.startTime, timeFormat)} - ${formatTime(item.endTime, timeFormat)}`;
-  }
-  if (item.timeType === "TIMED_OPEN" && item.startTime) {
-    return `From ${formatTime(item.startTime, timeFormat)}`;
-  }
-  if (item.timeType === "DEADLINE") return "Deadline";
-  if (item.timeType === "DATE_RANGE") {
-    const rangeEnd = item.rangeEndDate ?? item.originalTask?.rangeEndDate?.slice(0, 10);
-    return rangeEnd ? `Until ${rangeEnd}` : "Date range";
-  }
-  if (item.timeType === "ANYTIME") return "Anytime";
-  return "";
-};
+const typeLabel = (type) => TASK_TYPES.find((t) => t.id === type)?.label || type;
 
 export default function DashboardTaskItem({
   item,
@@ -36,18 +22,21 @@ export default function DashboardTaskItem({
   onClick,
 }) {
   const accentColor = item.effectiveColor || "#94a3b8";
-  const timeLabel = buildTimeLabel(item, timeFormat);
-  const dateLabel = showDate ? formatDateLabel(item.date, todayStr) : "";
-  const meta = [dateLabel, timeLabel, item.type].filter(Boolean).join(" · ");
+  const timeLabel = formatTaskTime(item, timeFormat);
+  // A multi-day item shows its whole range, so a separate date label would repeat it
+  const dateLabel = showDate && item.timeType !== "MULTI_DAY" ? formatDateLabel(item.date, todayStr) : "";
+  const meta = [dateLabel, timeLabel, typeLabel(item.type), item.seriesId != null ? "🔁" : ""]
+    .filter(Boolean)
+    .join(" · ");
 
   const handleToggle = (e) => {
     e.stopPropagation();
-    if (onToggle) onToggle(item.taskId, item.date);
+    if (onToggle) onToggle(item);
   };
 
   const handlePin = (e) => {
     e.stopPropagation();
-    onTogglePin(item.taskId, !item.isPinned);
+    onTogglePin(item, !item.isPinned);
   };
 
   return (
@@ -58,7 +47,7 @@ export default function DashboardTaskItem({
         onClick ? "cursor-pointer hover:brightness-110" : ""
       } ${item.isCompleted ? "opacity-50" : ""}`}
     >
-      {onToggle && !item.noToggle && item.isCompletable !== false && (
+      {onToggle && item.isCompletable !== false && (
         <input
           type="checkbox"
           checked={item.isCompleted}
@@ -89,7 +78,11 @@ export default function DashboardTaskItem({
         </button>
       )}
 
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${PRIORITY_STYLES[item.priority] || PRIORITY_STYLES.MEDIUM}`}>
+      <span
+        className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+          PRIORITY_STYLES[item.priority] || PRIORITY_STYLES.MEDIUM
+        }`}
+      >
         {item.priority}
       </span>
     </li>

@@ -1,22 +1,24 @@
 // src/context/AuthContext.jsx
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 import api from "../services/api";
 
 const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("token") || null);
-  const [loading, setLoading] = useState(true);
+const readStoredUser = () => {
+  try {
+    const stored = localStorage.getItem("user");
+    return stored && localStorage.getItem("token") ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
-  }, [token]);
+export function AuthProvider({ children }) {
+  // The session is restored synchronously from localStorage, so there is no loading phase
+  const [user, setUser] = useState(readStoredUser);
+  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
+  const loading = false;
 
   const login = async (email, password) => {
     const response = await api.post("/auth/login", { email, password });
@@ -50,4 +52,5 @@ export function AuthProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

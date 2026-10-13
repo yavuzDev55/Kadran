@@ -16,6 +16,20 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Malformed or oversized JSON body (thrown by express.json before any route runs)
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      success: false,
+      error: { name: 'ValidationError', message: 'Request body is not valid JSON' },
+    });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      error: { name: 'PayloadTooLargeError', message: 'Request body is too large' },
+    });
+  }
+
   // Prisma: Unique constraint (duplicate email, duplicate category name vb.)
   if (err.code === 'P2002') {
     const field = err.meta?.target?.[0] || 'field';

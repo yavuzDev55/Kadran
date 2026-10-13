@@ -9,21 +9,18 @@ sense of time.
 
 ## Features
 
-- **Dashboard (home page)** — six panels on one screen:
-  - **Active Now** — the task running right now, with a progress bar and remaining time
-  - **Today / Next 7 Days** — tabbed agenda; the weekly tab expands recurring tasks and groups them by day
-  - **Pinned** — every task you pinned, regardless of date
-  - **High Priority** — unfinished `HIGH` tasks for the next 14 days, plus undated ones
-  - **Anytime Tasks** — tasks with no date and no time
-  - **Search** — find tasks by name and/or task type
-- **Calendar** — week and month views with a configurable hour range
-- **List view** — filter by type, priority, tag, and date range
+- **Dashboard (home page)** — top to bottom:
+  - **Active now** — a slim strip for `TIMED` tasks running right now and `MULTI_DAY` tasks whose range contains today (progress and time left); when nothing is active it shows the next task of the day
+  - **Today / Next 7 days** — tabbed agenda
+  - **High priority** and **Pinned** — at most five rows each, with a link to the filtered list
+  - **Any time** — every task without a date or time, in a scrollable box with search and a full-list dialog
+- **Calendar** — week and month views; multi-day tasks are bars across the days, open-ended tasks and deadlines are small labels at their clock time; filters live in a left sidebar
+- **List view** — left filter sidebar (search, type, time type, priority, tags, date range, completed, pinned); a recurring series is one row that expands into its occurrences
 - **Five time models** — see [Time models](#time-models)
-- **Recurring tasks** — daily, weekly (chosen weekdays), or monthly (a day of the month or the last day), with an optional end date
-- **Per-occurrence completion** — completing one lecture does not complete the whole series
-- **Flexible weekly schedule** — one task with a different time slot per weekday
-- **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinned tasks are collected in the dashboard's Pinned panel
-- **Tags, custom colors, completability** per task
+- **Task-type rules** — course, homework, exam and custom tasks each allow different time models, recurrence and defaults, see [Task types](#task-types)
+- **Recurring tasks** — daily, weekly (chosen weekdays, each with its own time), or monthly (a day of the month or the last day). The end date is required and at most one year after the start. Every occurrence is a real task with its own completion, edit and delete
+- **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinning a series pins every occurrence
+- **Tags** — added through a search box that suggests existing tags while you type; custom colors and completability per task
 - **User preferences** — week start, calendar hours, 12/24-hour clock, default view, hide completed, timezone
 
 **Design note:** KADRAN intentionally does **not** detect or block schedule
@@ -59,9 +56,9 @@ Kadran/
 │       │   └── utils/              # custom errors, date helpers
 │       └── features/               # one folder per domain
 │           ├── auth/               # router · controller · service · db · validator
-│           ├── task/
+│           ├── task/               # + task.rules.js (type rules), task.time.js (time models)
 │           ├── tag/
-│           ├── recurring/          # occurrence generation
+│           ├── recurring/          # series: occurrence generation, /series routes
 │           └── meta/               # color palette
 │
 └── kadran-frontend/
@@ -71,7 +68,7 @@ Kadran/
         ├── services/api.js         # axios instance + auth interceptor
         ├── pages/                  # Dashboard, Tasks, TaskCreate, Calendar, Settings, Login, Register
         ├── components/             # dashboard panels, calendar views, modals, dialogs
-        └── utils/                  # calendarUtils, dashboardUtils, formatTime
+        └── utils/                  # dateUtils, calendarUtils, dashboardUtils, formatTime, taskRules, filters
 ```
 
 ---
@@ -102,14 +99,11 @@ Environment variables (`kadran-backend/.env`):
 | `PORT` | Defaults to `3000` |
 | `FRONTEND_URL` | Allowed CORS origin. Use `http://localhost:5173` in development |
 | `MAX_TIMED_HOURS_WARNING` | Warn when a `TIMED` task is longer than this many hours (default `24`) |
-| `MAX_RANGE_DAYS_WARNING` | Warn when a `DATE_RANGE` task is longer than this many days (default `30`) |
-| `MAX_RANGE_DAYS_HARD` | Reject a `DATE_RANGE` task longer than this many days (default `365`) |
+| `MAX_RANGE_DAYS_WARNING` | Warn when a `MULTI_DAY` task is longer than this many days (default `30`) |
+| `MAX_RANGE_DAYS_HARD` | Reject a `MULTI_DAY` task longer than this many days (default `365`) |
+| `MAX_LIST_LIMIT` | Largest page `GET /tasks` returns (default `500`) |
 
-> `.env.example` currently lists `FRONTEND_URL` as port 3000. The Vite dev
-> server runs on **5173**, so set it to `http://localhost:5173` or the browser
-> will block API requests.
-
-Other scripts: `npm start`, `npm run prisma:studio`, `npm run db:reset`.
+Other scripts: `npm test` (backend tests, no database needed), `npm start`, `npm run prisma:studio`, `npm run db:reset`.
 
 ### 2. Frontend
 
@@ -138,7 +132,8 @@ Open `http://localhost:5173`, register an account, and create a task with
 | `/` | Dashboard | yes |
 | `/tasks` | List view with filters | yes |
 | `/tasks/new` | Create task | yes |
-| `/tasks/edit/:id` | Edit task | yes |
+| `/tasks/edit/:id` | Edit a task, or one occurrence of a series | yes |
+| `/tasks/edit/:id?scope=series` | Edit the fields shared by a whole series | yes |
 | `/calendar` | Week / month calendar | yes |
 | `/settings` | User preferences | yes |
 | `/login`, `/register` | Authentication | no |
@@ -150,39 +145,50 @@ Open `http://localhost:5173`, register an account, and create a task with
 Task types: `COURSE`, `EXAM`, `HOMEWORK`, `CUSTOM`.
 Priorities: `LOW`, `MEDIUM`, `HIGH`.
 
+### Task types
+
+| Type | Allowed time models | Recurrence | Defaults |
+|------|--------------------|------------|----------|
+| `COURSE` | `TIMED` | yes | completable optional (on) |
+| `HOMEWORK` | `DEADLINE` | no | completable always on |
+| `EXAM` | `TIMED` | no | priority `HIGH`, completable optional (off) |
+| `CUSTOM` | any | `TIMED` / `OPEN_ENDED` only | completable optional (on) |
+
+The rules live in `kadran-backend/src/features/task/task.rules.js`; the frontend keeps a mirror in
+`kadran-frontend/src/utils/taskRules.js`. Keep both in sync.
+
 ### Time models
 
-| `timeType` | Fields used | Example |
-|------------|-------------|---------|
-| `TIMED` | `date`, `startTime`, `endTime` | Lecture, Monday 09:00–11:00 |
-| `TIMED_OPEN` | `date`, `startTime` | Study session from 14:00, no fixed end |
-| `DEADLINE` | `date` | Assignment due on a given day |
-| `DATE_RANGE` | `rangeStartDate`, `rangeEndDate` (+ optional times) | Project running over two weeks |
-| `ANYTIME` | none | "Read chapter 4" — no date, no time |
+| `timeType` | Fields used | Example | On the calendar |
+|------------|-------------|---------|-----------------|
+| `TIMED` | `date`, `startTime`, `endTime` | Lecture, Monday 09:00–11:00 | block over its duration |
+| `OPEN_ENDED` | `date`, `startTime` | Study session from 14:00, no fixed end | small label at the start time |
+| `MULTI_DAY` | `rangeStartDate`, `rangeEndDate` (whole days; the same day twice = one-day task) | Project over two weeks | bar across the days (all-day item for one day) |
+| `ANY_TIME` | none | "Read chapter 4" | not shown |
+| `DEADLINE` | `date`, `endTime` (due time, default `23:59`) | Assignment due Friday 17:00 | small label at the due time |
 
 ### Recurrence
 
-`isRecurring` with a `recurrencePattern` of `DAILY`, `WEEKLY`
-(`recurrenceDays`, e.g. `MONDAY,WEDNESDAY`) or `MONTHLY` (`recurrenceDay`,
-`1`–`31`, or `-1` for the last day). The database stores **one row per series**;
-individual dates are generated on demand by
-`kadran-backend/src/features/recurring/recurring.service.js`.
-`kadran-frontend/src/utils/calendarUtils.js` mirrors that logic, so keep the two
-in sync when changing recurrence rules.
+A recurring task is a `TaskSeries` (the rule: pattern, start and end date, weekdays or day of month)
+plus **one real task per occurrence** (`Task.seriesId`). The occurrences are generated once, when the
+task is created (`kadran-backend/src/features/recurring/recurring.service.js`).
 
-Completing a recurring task writes a `TaskCompletion` row for that date only.
-Non-recurring tasks use the plain `isCompleted` flag.
+- `recurrence`: `{ pattern: DAILY | WEEKLY | MONTHLY, startDate, endDate, weekDays?, monthDay?, slots? }`
+- `endDate` is required and at most one year after `startDate`
+- `WEEKLY` takes `weekDays` and optional per-weekday clock times in `slots`; `MONTHLY` takes `monthDay`
+  `1`–`31` (clamped to short months) or `-1` for the last day
+- Only `TIMED` and `OPEN_ENDED` tasks of a type that allows recurrence can repeat
+- Each occurrence has its own completion and delete. Only its day and time can be edited; the
+  shared fields (title, priority, color, ...) are edited on the series (`PATCH /series/:id`)
+- Pinning is applied to the whole series
 
 ### Other task fields
 
-- `isCompletable` — defaults to `false` for `COURSE`, `true` otherwise
+- `isCompletable` — default and whether it can be changed depend on the task type (see [Task types](#task-types))
 - `color` — optional, must come from the palette (`GET /meta/colors`); falls back to the type color
-- `isPinned` — pinned tasks are listed in the dashboard's Pinned panel regardless of date.
-  A pinned recurring task shows its next unfinished occurrence (within 14 days) with its date;
-  if there is none, the series is listed without a checkbox. Set it in the task form, or
-  toggle it with the 📌 button on the dashboard, in the list view (pinned tasks are sorted
-  first), and in the calendar's task detail window
-- `isFlexibleSchedule` + `schedules` — a different time slot per weekday
+- `isPinned` — pinned tasks are listed in the dashboard's Pinned panel regardless of date. A pinned
+  series is listed once, as its next unfinished occurrence. Set it in the task form, or toggle it with
+  the 📌 button on the dashboard, in the list view and in the calendar's task detail window
 
 ---
 
@@ -201,22 +207,24 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 | GET | `/tasks` | List tasks |
 | GET | `/tasks/:id` | Single task |
 | POST | `/tasks` | Create task |
-| PATCH | `/tasks/:id` | Update task; partial bodies are accepted (e.g. `{ "isPinned": true }`) |
-| DELETE | `/tasks/:id` | Delete task |
-| PATCH | `/tasks/:id/toggle` | Toggle completion; body `{ "date": "YYYY-MM-DD" }` is required for recurring tasks |
+| PATCH | `/tasks/:id` | Update task; partial bodies are accepted (e.g. `{ "isPinned": true }`). For one occurrence of a series only `date`, `startTime`, `endTime` and `isPinned` are accepted |
+| DELETE | `/tasks/:id` | Delete task (for a series: only that occurrence) |
+| PATCH | `/tasks/:id/toggle` | Toggle completion |
+| GET, PATCH, DELETE | `/series/:id` | Read a series with its occurrences / update the shared fields / delete the whole series |
+| POST | `/series/:id/tags` | Add a tag to every occurrence |
 | POST | `/tasks/:id/tags` | Add a tag by name |
 | DELETE | `/tasks/:id/tags/:tagId` | Remove a tag |
-| GET, DELETE | `/tags`, `/tags/:id` | List / delete tags |
+| GET, DELETE | `/tags`, `/tags/:id` | List (`?filter=` text, `?limit=` up to 50) / delete tags |
 | GET | `/meta/colors` | Color palette and per-type defaults |
 | GET | `/health` | Health check |
 
-`GET /tasks` query parameters: `q` (case-insensitive title search), `type`,
-`priority`, `tags` (comma-separated), `from`, `to`, `showCompleted`, `limit`
-(default 50), `offset`.
+`GET /tasks` query parameters: `q` (case-insensitive title search), `type`, `priority`, `timeType`,
+`isPinned`, `tags` (comma-separated), `from`, `to`, `showCompleted` (shown unless set to `false`),
+`collapseSeries` (one row per series, with `seriesInfo`), `today` (picks the occurrence that stands for
+a series), `limit` (default 50, at most `MAX_LIST_LIMIT`), `offset`.
 
-> `from` / `to` match a task's own `date` or `rangeStartDate` only. A recurring
-> series is stored with its first date, so the calendar and dashboard fetch
-> tasks without a date range and expand recurrences on the client.
+> `from` / `to` return single-day tasks whose `date` is inside the window and `MULTI_DAY` tasks whose
+> range overlaps it. `ANY_TIME` tasks have no date and are never returned by a `from` / `to` query.
 
 ---
 
@@ -230,8 +238,8 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 
 ## Known limitations
 
-- The dashboard and calendar load up to 100 tasks per request.
-- A `DATE_RANGE` task is drawn on the calendar grid only on its start date.
+- The calendar loads up to 500 tasks per visible range.
 - On the dashboard, a timed task that crosses midnight counts as active only until midnight.
-- Completing a pinned recurring task from the Pinned panel affects only the occurrence shown there; a series with no occurrence in the next 14 days cannot be completed from the panel.
-- There is no seed script and no automated test suite yet.
+- A series cannot change its type, time model or repeat rule after it is created; delete it and create a new one.
+- A tag cannot be removed from a whole series, only from individual non-recurring tasks.
+- There is no seed script. Backend tests (`npm test`) cover recurrence, task rules and validation; there are no frontend tests yet.

@@ -1,185 +1,165 @@
 // src/utils/calendarUtils.js
+// Turns backend tasks into what the calendar draws. Every occurrence of a recurring task is a
+// real task, so there is no recurrence expansion here any more.
+//
+//   TIMED       block from start to end
+//   OPEN_ENDED  small marker at its start time (no duration)
+//   DEADLINE    small marker at its due time
+//   MULTI_DAY   a bar across whole days (one day long = a one-column bar)
+//   ANY_TIME    never drawn
 
-// UTC day index (0=Sunday) → day name matching backend MONDAY..SUNDAY convention
-const UTC_DAY_NAMES = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+import { diffDays, sliceDate, timeToMinutes } from './dateUtils.js';
+
+// Height of a marker (OPEN_ENDED / DEADLINE) when events are laid out side by side
+export const MARKER_MINUTES = 30;
+
+const baseEvent = (task, date) => ({
+  id: String(task.id),
+  taskId: task.id,
+  seriesId: task.seriesId ?? null,
+  title: task.title,
+  type: task.type,
+  timeType: task.timeType,
+  priority: task.priority,
+  isCompleted: Boolean(task.isCompleted),
+  isCompletable: task.isCompletable !== false,
+  isPinned: Boolean(task.isPinned),
+  effectiveColor: task.effectiveColor || task.color || '#94a3b8',
+  date,
+  startTime: task.startTime || null,
+  endTime: task.endTime || null,
+  tags: task.tags || [],
+  originalTask: task,
+});
+
+/** Minute of the day at which a single-day task is drawn (null when it has no clock time). */
+export const getAnchorMinutes = (task) => {
+  if (task.timeType === 'TIMED' || task.timeType === 'OPEN_ENDED') {
+    return task.startTime ? timeToMinutes(task.startTime) : null;
+  }
+  if (task.timeType === 'DEADLINE') return task.endTime ? timeToMinutes(task.endTime) : null;
+  return null;
+};
 
 /**
- * Normalizes backend tasks into flat CalendarEvent objects for UI rendering.
- * Recurring tasks are expanded into individual occurrence instances.
- * Per-occurrence completion is resolved from task.completedDates (array of 'YYYY-MM-DD').
+ * @returns {{ events: object[], spans: object[] }}
+ *   events: single-day tasks inside [rangeStart, rangeEnd]
+ *   spans:  MULTI_DAY tasks overlapping the range (start / end are the task's real dates)
  */
-export const normalizeTasksToEvents = (tasks, viewStartDate, viewEndDate) => {
+export const buildCalendarItems = (tasks, rangeStart, rangeEnd) => {
   const events = [];
+  const spans = [];
 
   tasks.forEach((task) => {
-    if (!task.isRecurring) {
-      // ANYTIME tasks have no date — not placed on the calendar grid
-      if (task.timeType === 'ANYTIME') return;
+    if (task.timeType === 'ANY_TIME') return;
 
-      const targetDate = task.date
-        ? task.date.slice(0, 10)
-        : task.rangeStartDate?.slice(0, 10);
-
-      if (targetDate && isDateInRange(targetDate, viewStartDate, viewEndDate)) {
-        events.push(createEventObject(task, targetDate));
-      }
+    if (task.timeType === 'MULTI_DAY') {
+      const start = sliceDate(task.rangeStartDate);
+      const end = sliceDate(task.rangeEndDate);
+      if (!start || !end || end < rangeStart || start > rangeEnd) return;
+      spans.push({ ...baseEvent(task, start), start, end });
       return;
     }
 
-    // Recurring tasks: expand occurrences within view range
-    const recurrenceStart = task.recurrenceStart
-      ? new Date(task.recurrenceStart)
-      : new Date(viewStartDate);
-    const recurrenceEnd = task.recurrenceEnd ? new Date(task.recurrenceEnd) : null;
+    const date = sliceDate(task.date);
+    if (!date || date < rangeStart || date > rangeEnd) return;
 
-    const viewStart = new Date(viewStartDate);
-    const viewEnd   = new Date(viewEndDate);
-
-    const loopStart = recurrenceStart > viewStart ? recurrenceStart : viewStart;
-    const loopEnd   = recurrenceEnd && recurrenceEnd < viewEnd ? recurrenceEnd : viewEnd;
-
-    const completedSet = new Set(task.completedDates || []);
-
-    let current = new Date(loopStart);
-    let iterations = 0;
-    const MAX_ITER = 500; // safety cap against malformed recurrence rules
-
-    while (current <= loopEnd && iterations < MAX_ITER) {
-      iterations++;
-      const dateStr = current.toISOString().slice(0, 10);
-      const dayName = UTC_DAY_NAMES[current.getUTCDay()];
-      let matched = false;
-
-      if (task.recurrencePattern === 'DAILY') {
-        matched = true;
-      } else if (task.recurrencePattern === 'WEEKLY') {
-        const daysArray = typeof task.recurrenceDays === 'string'
-          ? task.recurrenceDays.split(',').map((d) => d.trim())
-          : (task.recurrenceDays || []);
-        matched = daysArray.includes(dayName);
-      } else if (task.recurrencePattern === 'MONTHLY') {
-        const targetDay = parseInt(task.recurrenceDay, 10);
-        if (targetDay === -1) {
-          const lastDay = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 0));
-          matched = current.getUTCDate() === lastDay.getUTCDate();
-        } else {
-          matched = current.getUTCDate() === targetDay;
-        }
-      }
-
-      if (matched) {
-        const isCompleted = completedSet.has(dateStr);
-        events.push(createEventObject(task, dateStr, dayName, isCompleted));
-      }
-
-      current.setUTCDate(current.getUTCDate() + 1);
+    const anchorMinutes = getAnchorMinutes(task);
+    let durationMinutes = 0;
+    if (task.timeType === 'TIMED' && anchorMinutes !== null && task.endTime) {
+      const end = timeToMinutes(task.endTime);
+      durationMinutes = end > anchorMinutes ? end - anchorMinutes : 24 * 60 - anchorMinutes; // stops at midnight
     }
+
+    events.push({ ...baseEvent(task, date), anchorMinutes, durationMinutes });
   });
 
-  return events;
+  return { events, spans };
 };
 
-const createEventObject = (task, dateString, dayName = null, isCompletedOverride = null) => {
-  let startTime = task.startTime;
-  let endTime = task.endTime;
+/**
+ * Side-by-side layout for events that overlap in time within one day. Adds `lane` (0-based
+ * column) and `laneCount` (columns in the overlapping group) to each timed event.
+ */
+export const layoutDayEvents = (events) => {
+  const items = events
+    .map((event) => ({
+      event,
+      start: event.anchorMinutes,
+      end: event.anchorMinutes + Math.max(event.durationMinutes, MARKER_MINUTES),
+    }))
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.event.taskId - b.event.taskId);
 
-  if (task.isFlexibleSchedule && task.schedules && dayName) {
-    const slot = task.schedules.find((s) => s.dayOfWeek === dayName);
-    if (slot) { startTime = slot.startTime; endTime = slot.endTime; }
-  }
+  const laid = [];
+  let group = [];
+  let groupEnd = -1;
 
-  let startHourNum = null;
-  let durationNum = 1;
-
-  if (startTime) {
-    const [h, m] = startTime.split(':').map(Number);
-    startHourNum = h + m / 60;
-
-    if (endTime) {
-      const [eh, em] = endTime.split(':').map(Number);
-      let endHourNum = eh + em / 60;
-      if (endHourNum < startHourNum) endHourNum += 24;
-      durationNum = endHourNum - startHourNum;
-    } else {
-      // TIMED_OPEN: render as a short fixed-duration block
-      durationNum = 0.5;
-    }
-  }
-
-  const isCompleted = isCompletedOverride !== null ? isCompletedOverride : (task.isCompleted || false);
-
-  return {
-    id: `${task.id}-${dateString}`,
-    taskId: task.id,
-    title: task.title,
-    type: task.type,
-    timeType: task.timeType,
-    priority: task.priority,
-    isCompleted,
-    isCompletable: task.isCompletable !== false,
-    isPinned: task.isPinned || false,
-    effectiveColor: task.effectiveColor || task.color || null,
-    date: dateString,
-    startTime: startTime || null,
-    endTime: endTime || null,
-    startHourNum,
-    durationNum,
-    tags: task.tags || [],
-    originalTask: task,
+  const flush = () => {
+    const laneEnds = [];
+    group.forEach((item) => {
+      let lane = laneEnds.findIndex((end) => end <= item.start);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(item.end);
+      } else {
+        laneEnds[lane] = item.end;
+      }
+      item.lane = lane;
+    });
+    group.forEach((item) => laid.push({ ...item.event, lane: item.lane, laneCount: laneEnds.length }));
+    group = [];
   };
-};
 
-const isDateInRange = (dateStr, startStr, endStr) =>
-  dateStr >= startStr && dateStr <= endStr;
+  items.forEach((item) => {
+    if (group.length > 0 && item.start >= groupEnd) {
+      flush();
+      groupEnd = -1;
+    }
+    group.push(item);
+    groupEnd = Math.max(groupEnd, item.end);
+  });
+  if (group.length > 0) flush();
 
-/**
- * Returns 7 consecutive 'YYYY-MM-DD' strings starting at startDateStr.
- * The caller is responsible for computing a startDateStr that already
- * respects the user's weekStartsOn preference (see getStartOfWeek in CalendarPage).
- */
-export const getWeekDaysArray = (startDateStr) => {
-  const days = [];
-  const start = new Date(startDateStr);
-  for (let i = 0; i < 7; i++) {
-    const current = new Date(start);
-    current.setUTCDate(start.getUTCDate() + i);
-    days.push(current.toISOString().slice(0, 10));
-  }
-  return days;
+  return laid;
 };
 
 /**
- * Generates 42 'YYYY-MM-DD' strings (6 weeks) for a month grid.
- * The grid's first row starts on the weekday given by weekStartsOn.
+ * Places multi-day bars on a 7-column window (one week row). Each bar gets CSS-grid columns
+ * (colStart / colEnd, 1-based, end exclusive), a `row` so bars never overlap, and flags telling
+ * whether it continues into the previous / next week.
  */
-export const getMonthDaysArray = (year, monthIndex, weekStartsOn = 'MONDAY') => {
-  const firstDay = new Date(Date.UTC(year, monthIndex, 1));
-  const firstDayOfWeek = firstDay.getUTCDay(); // 0=Sunday..6=Saturday
+export const placeSpans = (spans, windowStart, windowEnd) => {
+  const placed = spans
+    .filter((span) => span.end >= windowStart && span.start <= windowEnd)
+    .map((span) => {
+      const start = span.start < windowStart ? windowStart : span.start;
+      const end = span.end > windowEnd ? windowEnd : span.end;
+      return {
+        ...span,
+        colStart: diffDays(windowStart, start) + 1,
+        colEnd: diffDays(windowStart, end) + 2,
+        continuesBefore: span.start < windowStart,
+        continuesAfter: span.end > windowEnd,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.colStart - b.colStart ||
+        b.colEnd - b.colStart - (a.colEnd - a.colStart) ||
+        a.taskId - b.taskId
+    );
 
-  const offset = weekStartsOn === 'SUNDAY'
-    ? firstDayOfWeek
-    : (firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1);
+  const rowEnds = [];
+  placed.forEach((span) => {
+    let row = rowEnds.findIndex((end) => end <= span.colStart);
+    if (row === -1) {
+      row = rowEnds.length;
+      rowEnds.push(span.colEnd);
+    } else {
+      rowEnds[row] = span.colEnd;
+    }
+    span.row = row;
+  });
 
-  const startDate = new Date(firstDay);
-  startDate.setUTCDate(firstDay.getUTCDate() - offset);
-
-  const days = [];
-  for (let i = 0; i < 42; i++) {
-    const current = new Date(startDate);
-    current.setUTCDate(startDate.getUTCDate() + i);
-    days.push(current.toISOString().slice(0, 10));
-  }
-  return days;
-};
-
-/**
- * Returns 3-letter day labels in the order matching weekStartsOn,
- * so grid headers line up with the generated day arrays above.
- */
-export const getWeekDayLabels = (weekStartsOn = 'MONDAY') => {
-  const mondayFirst = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  if (weekStartsOn === 'SUNDAY') {
-    return ['Sun', ...mondayFirst.slice(0, 6)];
-  }
-  return mondayFirst;
+  return { spans: placed, rowCount: rowEnds.length };
 };

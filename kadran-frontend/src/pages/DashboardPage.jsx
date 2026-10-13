@@ -1,4 +1,6 @@
 // src/pages/DashboardPage.jsx
+// Top to bottom: a slim "active now" strip, the upcoming agenda (today / this week), high
+// priority and pinned tasks (a handful each), and every any-time task.
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -6,26 +8,32 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { setTaskPinned } from "../services/taskService";
-import { normalizeTasksToEvents } from "../utils/calendarUtils";
 import {
-  addDaysToDateStr,
-  getNowMinutesInTimezone,
-  getOngoingRangeItems,
-  getTodayInTimezone,
-  isEventActive,
+  buildAgendaItems,
+  findNextToday,
+  isItemActive,
   sortByDateThenTime,
   sortByTime,
   taskToItem,
-  timeToMinutes,
 } from "../utils/dashboardUtils";
+import { addDays, getNowMinutesInTimezone, getTodayInTimezone, sliceDate } from "../utils/dateUtils";
 import ActiveTaskPanel from "../components/ActiveTaskPanel";
 import AgendaPanel from "../components/AgendaPanel";
+import AnyTimePanel from "../components/AnyTimePanel";
 import TaskListPanel from "../components/TaskListPanel";
-import TaskSearchPanel from "../components/TaskSearchPanel";
 
 const CLOCK_TICK_MS = 30 * 1000;
 const WEEK_WINDOW_DAYS = 7;
-const HIGH_PRIORITY_WINDOW_DAYS = 14;
+const PANEL_LIMIT = 5;
+
+const EMPTY_DATA = { key: null, upcoming: [], high: [], pinned: [], anytime: [], failed: {} };
+
+/** A high-priority task still worth showing: undated, or not over yet. */
+const isCurrent = (task, todayStr) => {
+  if (task.timeType === "ANY_TIME") return true;
+  if (task.timeType === "MULTI_DAY") return (sliceDate(task.rangeEndDate) || "") >= todayStr;
+  return (sliceDate(task.date) || "") >= todayStr;
+};
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -35,129 +43,121 @@ export default function DashboardPage() {
   const timeFormat = user?.timeFormat || "H24";
   const hideCompleted = user?.hideCompleted || false;
 
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
+  const [reloadTick, setReloadTick] = useState(0);
+  const [data, setData] = useState(EMPTY_DATA);
 
-  // Keeps "today" and the active task fresh without reloading the page
+  // Keeps "today" and the active tasks fresh without reloading the page
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true);
-        // No from/to: recurring patterns are stored with their first date only,
-        // so they must be fetched whole and expanded on the client (same as CalendarPage).
-        const response = await api.get("/tasks", { params: { limit: 100, showCompleted: true } });
-        setTasks(response.data.data || []);
-      } catch {
-        toast.error("Failed to load tasks");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTasks();
-  }, []);
-
   const todayStr = getTodayInTimezone(timeZone, now);
   const nowMinutes = getNowMinutesInTimezone(timeZone, now);
+  const weekEnd = addDays(todayStr, WEEK_WINDOW_DAYS - 1);
+
+  // New data when the day changes or after a pin change; "loading" = data is for another key
+  const loadKey = `${todayStr}|${reloadTick}`;
+  const loading = data.key !== loadKey;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      const requests = {
+        upcoming: { from: todayStr, to: weekEnd, limit: 500 },
+        high: { priority: "HIGH", showCompleted: false, collapseSeries: true, today: todayStr, limit: 200 },
+        pinned: { isPinned: true, collapseSeries: true, today: todayStr, limit: 100 },
+        anytime: { timeType: "ANY_TIME", showCompleted: false, limit: 500 },
+      };
+      const names = Object.keys(requests);
+      const results = await Promise.allSettled(names.map((name) => api.get("/tasks", { params: requests[name] })));
+      if (cancelled) return;
+
+      const next = { ...EMPTY_DATA, key: loadKey, failed: {} };
+      results.forEach((result, index) => {
+        const name = names[index];
+        if (result.status === "fulfilled") next[name] = result.value.data.data || [];
+        else next.failed[name] = true;
+      });
+      if (Object.keys(next.failed).length === names.length) toast.error("Failed to load tasks");
+      setData(next);
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadKey, todayStr, weekEnd]);
 
   const panels = useMemo(() => {
-    const windowEnd = addDaysToDateStr(todayStr, HIGH_PRIORITY_WINDOW_DAYS);
-    const weekEnd = addDaysToDateStr(todayStr, WEEK_WINDOW_DAYS - 1);
     const keep = (item) => !(hideCompleted && item.isCompleted);
 
-    // Occurrences from today through the longest window (recurring tasks expanded)
-    const events = normalizeTasksToEvents(tasks, todayStr, windowEnd);
-    // Multi-day ranges that started earlier but are still running
-    const rangeItems = getOngoingRangeItems(tasks, todayStr);
+    const agenda = buildAgendaItems(data.upcoming, todayStr, weekEnd);
+    const todayItems = sortByTime(agenda.filter((item) => item.date === todayStr)).filter(keep);
+    const weekItems = sortByDateThenTime(agenda).filter(keep);
 
-    // Today: today's occurrences + running ranges
-    const todayEvents = events.filter((e) => e.date === todayStr);
-    const todayBase = [...todayEvents, ...rangeItems];
-    const today = sortByTime(todayBase).filter(keep);
-
-    // Pinned: every pinned task, regardless of date. A recurring series is shown as its
-    // next unfinished occurrence (completion is per date, so a concrete date is needed to
-    // toggle it); if none falls inside the window, the series is listed without a checkbox.
-    const pinnedItems = tasks
-      .filter((t) => t.isPinned)
-      .map((t) => {
-        if (!t.isRecurring) return taskToItem(t);
-        const next = sortByDateThenTime(events.filter((e) => e.taskId === t.id && !e.isCompleted))[0];
-        return next ?? { ...taskToItem(t), date: null, noToggle: true };
-      })
-      .filter(keep);
-    // Unfinished first, then by date (stable sort keeps the date order inside each group)
-    const pinned = sortByDateThenTime(pinnedItems).sort(
-      (a, b) => Number(a.isCompleted) - Number(b.isCompleted)
+    // Only TIMED (running now) and MULTI_DAY (today inside the range) are "active"
+    const active = todayItems.filter(
+      (item) =>
+        (item.timeType === "TIMED" || item.timeType === "MULTI_DAY") && isItemActive(item, todayStr, nowMinutes)
+    );
+    const next = findNextToday(
+      todayItems.filter((item) => item.timeType !== "MULTI_DAY"),
+      nowMinutes
     );
 
-    // Week agenda: everything dated from today through weekEnd
-    const week = sortByDateThenTime(
-      [...events.filter((e) => e.date <= weekEnd), ...rangeItems]
-    ).filter(keep);
-
-    // Active: only today's occurrences
-    const activeEvents = todayEvents.filter((e) => isEventActive(e, nowMinutes));
-    const nextEvent = sortByTime(
-      todayEvents.filter(
-        (e) => !e.isCompleted && e.startTime && timeToMinutes(e.startTime) > nowMinutes
-      )
-    )[0];
-
-    // High priority: unfinished only, dated ones within the window, plus undated (ANYTIME) ones
-    const anytimeItems = tasks.filter((t) => t.timeType === "ANYTIME").map(taskToItem);
     const high = sortByDateThenTime(
-      [...events, ...rangeItems, ...anytimeItems].filter((i) => i.priority === "HIGH" && !i.isCompleted)
+      data.high.filter((task) => isCurrent(task, todayStr)).map((task) => taskToItem(task))
     );
 
-    const anytime = anytimeItems.filter(keep);
+    // Unfinished first, then by date (the sort is stable)
+    const pinned = sortByDateThenTime(data.pinned.map((task) => taskToItem(task)))
+      .filter(keep)
+      .sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted));
 
-    return { today, week, pinned, activeEvents, nextEvent, high, anytime };
-  }, [tasks, todayStr, nowMinutes, hideCompleted]);
+    const anytime = data.anytime.map((task) => taskToItem(task));
 
-  // Same optimistic update + rollback strategy as CalendarPage
-  const handleToggleCompletion = async (taskId, date = null) => {
-    const task = tasks.find((t) => t.id === taskId);
-    const isRecurring = Boolean(task?.isRecurring);
+    return { todayItems, weekItems, active, next, high, pinned, anytime };
+  }, [data, todayStr, weekEnd, nowMinutes, hideCompleted]);
 
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        if (isRecurring && date) {
-          const completed = new Set(t.completedDates || []);
-          if (completed.has(date)) completed.delete(date);
-          else completed.add(date);
-          return { ...t, completedDates: [...completed] };
-        }
-        return { ...t, isCompleted: !t.isCompleted };
-      })
-    );
+  // ── Actions: optimistic update on every list, rolled back when the request fails ──
+  const patchEverywhere = (match, patch) =>
+    setData((prev) => {
+      const apply = (list) => list.map((task) => (match(task) ? { ...task, ...patch } : task));
+      return {
+        ...prev,
+        upcoming: apply(prev.upcoming),
+        high: apply(prev.high),
+        pinned: apply(prev.pinned),
+        anytime: apply(prev.anytime),
+      };
+    });
 
+  const handleToggleCompletion = async (item) => {
+    const next = !item.isCompleted;
+    const match = (task) => task.id === item.taskId;
+    patchEverywhere(match, { isCompleted: next });
     try {
-      await api.patch(`/tasks/${taskId}/toggle`, isRecurring && date ? { date } : {});
+      await api.patch(`/tasks/${item.taskId}/toggle`);
     } catch {
+      patchEverywhere(match, { isCompleted: !next });
       toast.error("Failed to update task status");
-      const response = await api.get("/tasks", { params: { limit: 100, showCompleted: true } });
-      setTasks(response.data.data || []);
     }
   };
 
-  // Optimistic pin/unpin. Returns true on success so callers can roll back their own copy.
-  const handleTogglePin = async (taskId, nextValue) => {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: nextValue } : t)));
+  // Pinning a series pins every occurrence, so the match covers the whole series
+  const handleTogglePin = async (item, nextValue) => {
+    const match = (task) => task.id === item.taskId || (item.seriesId != null && task.seriesId === item.seriesId);
+    patchEverywhere(match, { isPinned: nextValue });
     try {
-      await setTaskPinned(taskId, nextValue);
+      await setTaskPinned(item.taskId, nextValue);
       toast.success(nextValue ? "Task pinned" : "Task unpinned");
-      return true;
+      setReloadTick((tick) => tick + 1); // the pinned list gains or loses a row
     } catch {
+      patchEverywhere(match, { isPinned: !nextValue });
       toast.error("Failed to update pin");
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isPinned: !nextValue } : t)));
-      return false;
     }
   };
 
@@ -175,43 +175,50 @@ export default function DashboardPage() {
     <div className="p-2 md:p-4 pb-12">
       <h1 className="text-xl font-bold text-slate-100 mb-4">Dashboard</h1>
 
-      <div className="relative">
+      <div className="relative flex flex-col gap-4">
         {loading && (
           <div className="absolute inset-0 bg-slate-900/50 z-30 flex items-center justify-center animate-pulse text-blue-400">
             Loading...
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <ActiveTaskPanel
-              activeEvents={panels.activeEvents}
-              nextEvent={panels.nextEvent}
-              nowMinutes={nowMinutes}
-              timeFormat={timeFormat}
-              onToggle={handleToggleCompletion}
-            />
-          </div>
+        <ActiveTaskPanel
+          activeItems={panels.active}
+          nextItem={panels.next}
+          todayStr={todayStr}
+          nowMinutes={nowMinutes}
+          timeFormat={timeFormat}
+          onItemClick={openTask}
+        />
 
-          <div className="lg:row-span-3">
-            <TaskSearchPanel todayStr={todayStr} timeFormat={timeFormat} onTogglePin={handleTogglePin} />
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <AgendaPanel
-            todayItems={panels.today}
-            weekItems={panels.week}
+            todayItems={panels.todayItems}
+            weekItems={panels.weekItems}
             weekDays={WEEK_WINDOW_DAYS}
             {...common}
           />
-          <TaskListPanel title="High Priority" items={panels.high} emptyMessage="No high priority tasks." showDate {...common} />
+          <TaskListPanel
+            title="High Priority"
+            items={panels.high}
+            emptyMessage="No high priority tasks."
+            showDate
+            limit={PANEL_LIMIT}
+            viewAllTo="/tasks?priority=HIGH"
+            error={Boolean(data.failed.high)}
+            {...common}
+          />
           <TaskListPanel
             title="📌 Pinned"
             items={panels.pinned}
             emptyMessage="No pinned tasks. Use the 📌 button on any task to pin it."
             showDate
+            limit={PANEL_LIMIT}
+            viewAllTo="/tasks?isPinned=true"
+            error={Boolean(data.failed.pinned)}
             {...common}
           />
-          <TaskListPanel title="Anytime Tasks" items={panels.anytime} emptyMessage="No anytime tasks." {...common} />
+          <AnyTimePanel items={panels.anytime} error={Boolean(data.failed.anytime)} {...common} />
         </div>
       </div>
     </div>

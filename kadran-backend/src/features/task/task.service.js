@@ -6,12 +6,11 @@ import {
   createTask as createTaskRecord,
   updateTask as updateTaskRecord,
   deleteTask as deleteTaskRecord,
-  toggleTask as toggleTaskRecord,
-  replaceTaskSchedules,
-  toggleCompletion,
-  findCompletionsByTask,
-  pruneCompletions,
+  setCompleted,
+  deleteSeriesIfEmpty,
+  updateSeriesTasks,
 } from './task.db.js';
+import { createSeriesWithTasks } from '../recurring/recurring.db.js';
 import {
   findOrCreateTag,
   addTagToTask as linkTagToTask,
@@ -23,36 +22,22 @@ import {
   ForbiddenError,
   ValidationError,
 } from '../../shared/utils/customErrors.js';
+import { getDayName, parseUTCDate, toDateStr } from '../../shared/utils/dateUtils.js';
 import { TYPE_DEFAULT_COLORS } from '../../config/colors.js';
-import { generateOccurrenceDates, toDateStr } from '../recurring/recurring.service.js';
+import { generateOccurrenceDates } from '../recurring/recurring.service.js';
+import { TASK_RULES } from './task.rules.js';
+import { buildTimeFields, has } from './task.time.js';
+import { validateTaskBody, validateTimeModel } from './task.validator.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getDefaultCompletable = (type) => type !== 'COURSE';
-
-export const serializeTask = (task, completedDatesOverride = null) => {
+export const serializeTask = (task) => {
   if (!task) return task;
-
-  // Build completedDates from the included completions relation.
-  // completedDatesOverride (a Set) is used after a toggle to avoid a re-fetch.
-  let completedDates;
-  if (completedDatesOverride !== null) {
-    completedDates = [...completedDatesOverride];
-  } else if (task.isRecurring && Array.isArray(task.completions)) {
-    completedDates = task.completions.map((c) =>
-      c.occurrenceDate instanceof Date
-        ? c.occurrenceDate.toISOString().slice(0, 10)
-        : String(c.occurrenceDate).slice(0, 10)
-    );
-  } else {
-    completedDates = [];
-  }
-
+  const { tags, ...rest } = task;
   return {
-    ...task,
-    tags: (task.tags || []).map((tt) => tt.tag.name),
+    ...rest,
+    tags: (tags || []).map((tt) => tt.tag.name),
     effectiveColor: task.color ?? TYPE_DEFAULT_COLORS[task.type] ?? '#94a3b8',
-    completedDates,
   };
 };
 
@@ -63,209 +48,207 @@ const assertOwnership = async (userId, taskId) => {
   return task;
 };
 
-const resolveTagIds = async (userId, tagNames = []) => {
-  const tags = await Promise.all(tagNames.map((name) => findOrCreateTag(userId, name)));
-  return tags.map((t) => t.id);
+/** Normalized, de-duplicated tag names -> tag ids. Sequential so a repeated name cannot race. */
+export const resolveTagIds = async (userId, tagNames = []) => {
+  const names = [...new Set(tagNames.map((name) => name.trim().toLowerCase()))];
+  const ids = [];
+  for (const name of names) {
+    const tag = await findOrCreateTag(userId, name);
+    ids.push(tag.id);
+  }
+  return ids;
 };
 
 const replaceTaskTags = async (taskId, currentTagIds, nextTagIds) => {
   const toRemove = currentTagIds.filter((id) => !nextTagIds.includes(id));
   const toAdd = nextTagIds.filter((id) => !currentTagIds.includes(id));
-  await Promise.all([
-    ...toRemove.map((tagId) => unlinkTagFromTask(taskId, tagId)),
-    ...toAdd.map((tagId) => linkTagToTask(taskId, tagId)),
-  ]);
+  for (const tagId of toRemove) await unlinkTagFromTask(taskId, tagId);
+  for (const tagId of toAdd) await linkTagToTask(taskId, tagId);
 };
 
-// ─── Build data for CREATE (all fields required) ──────────────────────────────
+const throwIfInvalid = (details) => {
+  if (Object.keys(details).length > 0) throw new ValidationError('Validation failed', details);
+};
 
-const buildCreateData = (body) => {
-  const base = {
-    title: body.title,
-    description: body.description ?? null,
+const dateOnly = (value) => (value ? toDateStr(value) : null);
+
+// ─── Create ───────────────────────────────────────────────────────────────────
+
+/** Fields every new task gets, with the type's defaults applied. */
+const buildCommonData = (body) => {
+  const rule = TASK_RULES[body.type];
+  return {
+    title: body.title.trim(),
+    description: has(body.description) ? body.description : null,
     type: body.type,
     timeType: body.timeType,
-    priority: body.priority ?? 'MEDIUM',
-    isCompletable: body.isCompletable !== undefined
-      ? Boolean(body.isCompletable)
-      : getDefaultCompletable(body.type),
+    priority: body.priority ?? rule.priority,
+    isCompletable: body.isCompletable ?? rule.completable.default,
     color: body.color ?? null,
-    isPinned: Boolean(body.isPinned ?? false),
-    isFlexibleSchedule: Boolean(body.isFlexibleSchedule),
-    schedulePattern: body.isFlexibleSchedule ? (body.schedulePattern ?? null) : null,
-    isRecurring: Boolean(body.isRecurring),
-    recurrencePattern: body.isRecurring ? body.recurrencePattern : null,
-    recurrenceStart: body.isRecurring ? new Date(body.recurrenceStart) : null,
-    recurrenceEnd: body.isRecurring && body.recurrenceEnd ? new Date(body.recurrenceEnd) : null,
-    recurrenceDays:
-      body.isRecurring && body.recurrencePattern === 'WEEKLY'
-        ? (Array.isArray(body.recurrenceDays) ? body.recurrenceDays.join(',') : body.recurrenceDays)
-        : null,
-    recurrenceDay:
-      body.isRecurring && body.recurrencePattern === 'MONTHLY' ? body.recurrenceDay : null,
-  };
-
-  if (body.timeType === 'TIMED') {
-    return {
-      ...base,
-      date: new Date(body.date),
-      startTime: body.isFlexibleSchedule ? null : body.startTime,
-      endTime: body.isFlexibleSchedule ? null : body.endTime,
-      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
-    };
-  }
-  if (body.timeType === 'TIMED_OPEN') {
-    return {
-      ...base,
-      date: new Date(body.date),
-      startTime: body.startTime,
-      endTime: null,
-      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
-    };
-  }
-  if (body.timeType === 'DEADLINE') {
-    return {
-      ...base,
-      date: new Date(body.date),
-      startTime: null, endTime: null,
-      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
-    };
-  }
-  if (body.timeType === 'ANYTIME') {
-    return {
-      ...base,
-      date: null, startTime: null, endTime: null,
-      rangeStartDate: null, rangeStartTime: null, rangeEndDate: null, rangeEndTime: null,
-    };
-  }
-  // DATE_RANGE
-  return {
-    ...base,
-    date: null, startTime: null, endTime: null,
-    rangeStartDate: new Date(body.rangeStartDate),
-    rangeStartTime: body.rangeStartTime ?? null,
-    rangeEndDate: new Date(body.rangeEndDate),
-    rangeEndTime: body.rangeEndTime ?? null,
+    isPinned: Boolean(body.isPinned),
   };
 };
 
-// ─── Build data for PATCH (only merge provided fields) ────────────────────────
+/**
+ * Recurring task: one TaskSeries row (the rule) + one real task per occurrence date.
+ * WEEKLY rules may override the clock times per weekday through `recurrence.slots`.
+ */
+const createSeries = async (userId, body, warnings) => {
+  const { pattern, startDate, endDate, weekDays = [], monthDay, slots = {} } = body.recurrence;
 
-const buildUpdateData = (existing, body) => {
-  const data = {};
-
-  if (body.title !== undefined)         data.title = body.title;
-  if (body.description !== undefined)   data.description = body.description ?? null;
-  if (body.type !== undefined)          data.type = body.type;
-  if (body.priority !== undefined)      data.priority = body.priority;
-  if (body.color !== undefined)         data.color = body.color ?? null;
-  if (body.isCompletable !== undefined) data.isCompletable = Boolean(body.isCompletable);
-  if (body.isPinned !== undefined)      data.isPinned = Boolean(body.isPinned);
-
-  const newTimeType = body.timeType ?? existing.timeType;
-  if (body.timeType !== undefined) data.timeType = body.timeType;
-
-  const typeChanged = body.timeType !== undefined && body.timeType !== existing.timeType;
-
-  if (newTimeType === 'TIMED') {
-    if (body.date !== undefined) data.date = new Date(body.date);
-    if (body.startTime !== undefined) data.startTime = body.startTime ?? null;
-    if (body.endTime !== undefined) data.endTime = body.endTime ?? null;
-    if (typeChanged) {
-      data.rangeStartDate = null; data.rangeStartTime = null;
-      data.rangeEndDate = null; data.rangeEndTime = null;
-    }
-  } else if (newTimeType === 'TIMED_OPEN') {
-    if (body.date !== undefined) data.date = new Date(body.date);
-    if (body.startTime !== undefined) data.startTime = body.startTime ?? null;
-    data.endTime = null;
-    if (typeChanged) {
-      data.rangeStartDate = null; data.rangeStartTime = null;
-      data.rangeEndDate = null; data.rangeEndTime = null;
-    }
-  } else if (newTimeType === 'DEADLINE') {
-    if (body.date !== undefined) data.date = new Date(body.date);
-    if (typeChanged) {
-      data.startTime = null; data.endTime = null;
-      data.rangeStartDate = null; data.rangeStartTime = null;
-      data.rangeEndDate = null; data.rangeEndTime = null;
-    }
-  } else if (newTimeType === 'ANYTIME') {
-    if (typeChanged) {
-      data.date = null; data.startTime = null; data.endTime = null;
-      data.rangeStartDate = null; data.rangeStartTime = null;
-      data.rangeEndDate = null; data.rangeEndTime = null;
-    }
-  } else if (newTimeType === 'DATE_RANGE') {
-    if (body.rangeStartDate !== undefined) data.rangeStartDate = new Date(body.rangeStartDate);
-    if (body.rangeStartTime !== undefined) data.rangeStartTime = body.rangeStartTime ?? null;
-    if (body.rangeEndDate !== undefined)   data.rangeEndDate = new Date(body.rangeEndDate);
-    if (body.rangeEndTime !== undefined)   data.rangeEndTime = body.rangeEndTime ?? null;
-    if (typeChanged) {
-      data.date = null; data.startTime = null; data.endTime = null;
-    }
+  const dates = generateOccurrenceDates({ pattern, startDate, endDate, weekDays, monthDay });
+  if (dates.length === 0) {
+    throw new ValidationError('Validation failed', {
+      recurrence: 'The recurrence rule produces no occurrences in the selected range',
+    });
   }
 
-  if (body.isRecurring !== undefined) {
-    data.isRecurring = Boolean(body.isRecurring);
-    if (!body.isRecurring) {
-      data.recurrencePattern = null; data.recurrenceStart = null;
-      data.recurrenceEnd = null; data.recurrenceDays = null; data.recurrenceDay = null;
-    }
-  }
-  if (body.recurrencePattern !== undefined) data.recurrencePattern = body.recurrencePattern;
-  if (body.recurrenceStart !== undefined)   data.recurrenceStart = new Date(body.recurrenceStart);
-  if (body.recurrenceEnd !== undefined)     data.recurrenceEnd = body.recurrenceEnd ? new Date(body.recurrenceEnd) : null;
-  if (body.recurrenceDays !== undefined) {
-    data.recurrenceDays = Array.isArray(body.recurrenceDays)
-      ? body.recurrenceDays.join(',')
-      : body.recurrenceDays;
-  }
-  if (body.recurrenceDay !== undefined) data.recurrenceDay = body.recurrenceDay;
+  const common = buildCommonData(body);
 
-  if (body.isFlexibleSchedule !== undefined) {
-    data.isFlexibleSchedule = Boolean(body.isFlexibleSchedule);
-    if (!body.isFlexibleSchedule) data.schedulePattern = null;
-  }
-  if (body.schedulePattern !== undefined) data.schedulePattern = body.schedulePattern ?? null;
+  const tasks = dates.map((date) => {
+    const slot = pattern === 'WEEKLY' ? slots[getDayName(date)] : undefined;
+    const times = slot ?? { startTime: body.startTime, endTime: body.endTime };
+    return { ...common, ...buildTimeFields(body.timeType, { date, ...times }) };
+  });
 
-  return data;
-};
+  const tagIds = await resolveTagIds(userId, Array.isArray(body.tags) ? body.tags : []);
 
-// ─── Public service functions ─────────────────────────────────────────────────
+  const { series, firstTaskId, count } = await createSeriesWithTasks({
+    userId,
+    series: {
+      pattern,
+      startDate: parseUTCDate(startDate),
+      endDate: parseUTCDate(endDate),
+      weekDays: pattern === 'WEEKLY' ? weekDays.join(',') : null,
+      monthDay: pattern === 'MONTHLY' ? monthDay : null,
+    },
+    tasks,
+    tagIds,
+  });
 
-export const getTask = async (userId, taskId) => {
-  const task = await assertOwnership(userId, taskId);
-
-  // For recurring tasks, also load which occurrences are completed
-  let completedDates = null;
-  if (task.isRecurring) {
-    completedDates = await findCompletionsByTask(taskId);
-  }
-
-  return serializeTask(task, completedDates);
+  const first = await findTaskById(firstTaskId);
+  return { task: serializeTask(first), warnings, series: { id: series.id, occurrences: count } };
 };
 
 export const createTask = async (userId, body, warnings = []) => {
-  const data = buildCreateData(body);
+  if (body.recurrence) return createSeries(userId, body, warnings);
+
+  const data = { ...buildCommonData(body), ...buildTimeFields(body.timeType, body) };
   const task = await createTaskRecord(userId, data);
 
   if (Array.isArray(body.tags) && body.tags.length > 0) {
     const tagIds = await resolveTagIds(userId, body.tags);
-    await Promise.all(tagIds.map((tagId) => linkTagToTask(task.id, tagId)));
-  }
-
-  if (body.isFlexibleSchedule && Array.isArray(body.schedules)) {
-    await replaceTaskSchedules(task.id, body.schedules);
+    for (const tagId of tagIds) await linkTagToTask(task.id, tagId);
   }
 
   const fullTask = await findTaskById(task.id);
-  return { task: serializeTask(fullTask), warnings };
+  return { task: serializeTask(fullTask), warnings, series: null };
 };
 
-export const updateTask = async (userId, taskId, body, warnings = []) => {
+// ─── Update ───────────────────────────────────────────────────────────────────
+
+const OCCURRENCE_EDITABLE = ['date', 'startTime', 'endTime', 'isPinned'];
+const MODEL_FIELDS = ['type', 'timeType', 'date', 'startTime', 'endTime', 'rangeStartDate', 'rangeEndDate'];
+
+const pick = (body, key, fallback) => (key in body ? body[key] : fallback);
+
+/**
+ * One occurrence of a recurring series: only its day and clock time may change.
+ * Pinning is the exception — it is kept identical across the whole series.
+ */
+const updateOccurrence = async (existing, body) => {
+  const forbidden = Object.keys(body).filter((key) => !OCCURRENCE_EDITABLE.includes(key));
+  if (forbidden.length > 0) {
+    const details = {};
+    forbidden.forEach((key) => {
+      details[key] = 'Only the day and time of a recurring occurrence can be edited';
+    });
+    throw new ValidationError('Validation failed', details);
+  }
+
+  const data = {};
+  const warnings = [];
+
+  const touchesTime = ['date', 'startTime', 'endTime'].some((key) => key in body);
+  if (touchesTime) {
+    const merged = {
+      type: existing.type,
+      timeType: existing.timeType,
+      date: pick(body, 'date', dateOnly(existing.date)),
+      startTime: pick(body, 'startTime', existing.startTime),
+      endTime: pick(body, 'endTime', existing.endTime),
+    };
+    const details = {};
+    validateTimeModel(merged, details, warnings);
+    throwIfInvalid(details);
+    Object.assign(data, buildTimeFields(existing.timeType, merged));
+  }
+
+  if (body.isPinned !== undefined) {
+    await updateSeriesTasks(existing.seriesId, { isPinned: Boolean(body.isPinned) });
+  }
+
+  const updated = Object.keys(data).length > 0
+    ? await updateTaskRecord(existing.id, data)
+    : await findTaskById(existing.id);
+  return { task: serializeTask(updated), warnings };
+};
+
+export const updateTask = async (userId, taskId, body) => {
   const existing = await assertOwnership(userId, taskId);
-  const data = buildUpdateData(existing, body);
+
+  if (existing.seriesId !== null) return updateOccurrence(existing, body);
+
+  const warnings = [];
+  const data = {};
+
+  ['title', 'description', 'priority', 'color', 'isCompletable', 'isPinned'].forEach((key) => {
+    if (body[key] !== undefined) data[key] = body[key];
+  });
+  if (body.title !== undefined) data.title = body.title.trim();
+  if (body.description === '') data.description = null;
+
+  // Type / time changes are validated on the merged result. Old rows are left alone when a
+  // request only touches simple fields (e.g. pinning), so they can never get "stuck".
+  const touchesModel = MODEL_FIELDS.some((key) => key in body);
+  if (touchesModel) {
+    const timeTypeChanged = body.timeType !== undefined && body.timeType !== existing.timeType;
+    const timeKeys = ['date', 'startTime', 'endTime', 'rangeStartDate', 'rangeEndDate'];
+
+    // A different time type starts from a clean slate; otherwise the stored values are kept
+    const stored = timeTypeChanged
+      ? {}
+      : {
+          date: dateOnly(existing.date),
+          startTime: existing.startTime,
+          endTime: existing.endTime,
+          rangeStartDate: dateOnly(existing.rangeStartDate),
+          rangeEndDate: dateOnly(existing.rangeEndDate),
+        };
+
+    const merged = {
+      title: data.title ?? existing.title,
+      type: pick(body, 'type', existing.type),
+      timeType: pick(body, 'timeType', existing.timeType),
+      isCompletable: body.isCompletable,
+    };
+    timeKeys.forEach((key) => {
+      merged[key] = pick(body, key, stored[key]);
+    });
+
+    const { details, warnings: modelWarnings } = validateTaskBody(merged, { allowRecurrence: false });
+    throwIfInvalid(details);
+    warnings.push(...modelWarnings);
+
+    data.type = merged.type;
+    data.timeType = merged.timeType;
+    Object.assign(data, buildTimeFields(merged.timeType, merged));
+
+    // Switching to a type that fixes the flag (homework) resets it to that type's default
+    const completable = TASK_RULES[merged.type].completable;
+    if (!completable.editable) data.isCompletable = completable.default;
+  }
+
   await updateTaskRecord(taskId, data);
 
   if (Array.isArray(body.tags)) {
@@ -274,101 +257,46 @@ export const updateTask = async (userId, taskId, body, warnings = []) => {
     await replaceTaskTags(taskId, currentTagIds, nextTagIds);
   }
 
-  const newIsFlexible = body.isFlexibleSchedule !== undefined
-    ? Boolean(body.isFlexibleSchedule)
-    : existing.isFlexibleSchedule;
-
-  if (newIsFlexible && Array.isArray(body.schedules)) {
-    await replaceTaskSchedules(taskId, body.schedules);
-  } else if (!newIsFlexible && existing.isFlexibleSchedule) {
-    await replaceTaskSchedules(taskId, []);
-  }
-
-  // If recurrence rule changed, remove completion records for dates that no longer exist.
-  // Generate valid dates for the next 2 years as the pruning window.
-  const updatedTask = await findTaskById(taskId);
-  if (updatedTask.isRecurring) {
-    const today = toDateStr(new Date());
-    const twoYearsOut = toDateStr(new Date(Date.now() + 730 * 86400000));
-    const validDateStrs = generateOccurrenceDates(updatedTask, today, twoYearsOut);
-    const validDates = validDateStrs.map((s) => new Date(s));
-    await pruneCompletions(taskId, validDates);
-  }
-
-  return { task: serializeTask(updatedTask), warnings };
+  return { task: serializeTask(await findTaskById(taskId)), warnings };
 };
 
+// ─── Delete / complete ────────────────────────────────────────────────────────
+
+/** Deletes a single task. For a series this removes just that occurrence. */
 export const deleteTask = async (userId, taskId) => {
-  await assertOwnership(userId, taskId);
-  // TaskCompletion rows are cascade-deleted by the DB relation
+  const task = await assertOwnership(userId, taskId);
   await deleteTaskRecord(taskId);
+  await deleteSeriesIfEmpty(task.seriesId);
 };
 
-export const toggleTask = async (userId, taskId, date) => {
+export const toggleTask = async (userId, taskId) => {
   const task = await assertOwnership(userId, taskId);
+  if (!task.isCompletable) throw new ForbiddenError('This task is not completable');
 
-  if (!task.isCompletable) {
-    throw new ForbiddenError('This task is not completable');
-  }
-
-  // Recurring: toggle specific occurrence
-  if (task.isRecurring) {
-    if (!date) {
-      throw new ValidationError('Validation failed', {
-        date: 'date is required when toggling a recurring task',
-      });
-    }
-
-    // Verify the date is a valid occurrence
-    const occurrenceDateStr = typeof date === 'string' ? date : toDateStr(date);
-    const validDates = generateOccurrenceDates(task, occurrenceDateStr, occurrenceDateStr);
-    if (!validDates.includes(occurrenceDateStr)) {
-      throw new ValidationError('Validation failed', {
-        date: `${occurrenceDateStr} is not a valid occurrence date for this task`,
-      });
-    }
-
-    const occurrenceDate = new Date(occurrenceDateStr);
-    const { completed } = await toggleCompletion(taskId, occurrenceDate);
-
-    const completedDates = await findCompletionsByTask(taskId);
-    return { task: serializeTask(task, completedDates), toggledDate: occurrenceDateStr, completed };
-  }
-
-  // Non-recurring: simple boolean flip
-  const updated = await toggleTaskRecord(taskId);
+  const updated = await setCompleted(taskId, !task.isCompleted);
   return { task: serializeTask(updated), completed: updated.isCompleted };
 };
 
-export const listTasks = async (userId, query) => {
-  const filters = {
-    from: query.from,
-    to: query.to,
-    type: query.type,
-    category: query.category,
-    priority: query.priority,
-    q: typeof query.q === 'string' && query.q.trim() ? query.q.trim() : undefined,
-    tags: query.tags ? query.tags.split(',').map((t) => t.trim().toLowerCase()) : undefined,
-    showCompleted: query.showCompleted !== 'false',
-    limit: query.limit ? Number(query.limit) : 50,
-    offset: query.offset ? Number(query.offset) : 0,
-  };
+// ─── Read ─────────────────────────────────────────────────────────────────────
 
+export const getTask = async (userId, taskId) => serializeTask(await assertOwnership(userId, taskId));
+
+export const listTasks = async (userId, filters) => {
   const { tasks, total, hasMore } = await findTasksByUser(userId, filters);
-  return { tasks: tasks.map((t) => serializeTask(t)), total, hasMore };
+  return { tasks: tasks.map(serializeTask), total, hasMore };
 };
+
+// ─── Tags ─────────────────────────────────────────────────────────────────────
 
 export const addTagToTask = async (userId, taskId, tagName) => {
   await assertOwnership(userId, taskId);
   const tag = await findOrCreateTag(userId, tagName);
   await linkTagToTask(taskId, tag.id);
-  const fullTask = await findTaskById(taskId);
-  return serializeTask(fullTask);
+  return serializeTask(await findTaskById(taskId));
 };
 
 export const removeTagFromTask = async (userId, taskId, tagId) => {
   await assertOwnership(userId, taskId);
   await unlinkTagFromTask(taskId, tagId);
-  const fullTask = await findTaskById(taskId);
-  return serializeTask(fullTask);
+  return serializeTask(await findTaskById(taskId));
 };

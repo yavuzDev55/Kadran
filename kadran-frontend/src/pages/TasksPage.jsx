@@ -1,359 +1,593 @@
-import { useState, useEffect } from "react";
+// src/pages/TasksPage.jsx
+// List view. A recurring series is one row (collapseSeries=true) that expands into its
+// occurrences; every occurrence has its own checkbox, edit and delete.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { useAuth } from "../context/AuthContext";
 import ConfirmDialog from "../components/ConfirmDialog";
+import FilterSidebar from "../components/FilterSidebar";
+import TagCombobox from "../components/TagCombobox";
 import { setTaskPinned } from "../services/taskService";
+import { DEFAULT_FILTERS } from "../utils/filters";
+import { formatTaskTime } from "../utils/formatTime";
+import { getTodayInTimezone, sliceDate } from "../utils/dateUtils";
+import { TASK_TYPES } from "../utils/taskRules";
+
+const PAGE_SIZE = 50;
+const FILTER_DEBOUNCE_MS = 250;
+
+const PRIORITY_STYLES = {
+  HIGH: "bg-red-900 text-red-200",
+  MEDIUM: "bg-amber-900 text-amber-200",
+  LOW: "bg-green-900 text-green-200",
+};
+
+const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
+
+const typeLabel = (type) => TASK_TYPES.find((t) => t.id === type)?.label || type;
+
+/** "2026-10-12 · 14:00 – 15:30": the day (single-day types) and the clock part. */
+const describeWhen = (task, timeFormat) => {
+  const time = formatTaskTime(task, timeFormat);
+  if (task.timeType === "MULTI_DAY" || task.timeType === "ANY_TIME") return time;
+  return [sliceDate(task.date), time].filter(Boolean).join(" · ");
+};
+
+/** Filters requested through the URL, e.g. /tasks?priority=HIGH (used by the dashboard links). */
+const filtersFromSearch = (searchParams) => ({
+  ...DEFAULT_FILTERS,
+  priority: searchParams.get("priority") || "",
+  type: searchParams.get("type") || "",
+  timeType: searchParams.get("timeType") || "",
+  pinnedOnly: searchParams.get("isPinned") === "true",
+});
+
+const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).filter(([k]) => k !== String(key)));
+
+const errorMessage = (err, fallback) => err.response?.data?.error?.message || fallback;
+
+function TagChips({ tags, onRemove }) {
+  if (!tags || tags.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-blue-400 text-xs rounded border border-slate-600"
+        >
+          #{tag}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(tag)}
+              className="text-slate-500 hover:text-red-400 leading-none"
+              aria-label={`Remove tag ${tag}`}
+            >
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function IconButton({ onClick, title, className = "", children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`p-2 rounded transition hover:bg-slate-600/50 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const TrashIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+    <path
+      fillRule="evenodd"
+      d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
+
+/** One occurrence inside an expanded series. */
+function OccurrenceRow({ task, timeFormat, onToggle, onEdit, onDelete }) {
+  return (
+    <li
+      className={`flex items-center gap-3 px-3 py-2 rounded border ${
+        task.isCompleted ? "bg-slate-900/50 border-slate-800 opacity-70" : "bg-slate-800 border-slate-600"
+      }`}
+    >
+      {task.isCompletable ? (
+        <input
+          type="checkbox"
+          checked={task.isCompleted}
+          onChange={() => onToggle(task)}
+          className="w-4 h-4 cursor-pointer accent-blue-600"
+        />
+      ) : (
+        <span className="w-4" />
+      )}
+      <span className={`flex-1 text-sm ${task.isCompleted ? "line-through text-slate-500" : "text-slate-200"}`}>
+        {describeWhen(task, timeFormat)}
+      </span>
+      <button type="button" onClick={() => onEdit(task)} className="text-xs text-slate-400 hover:text-white px-2 py-1">
+        Edit
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(task)}
+        className="text-xs text-slate-400 hover:text-red-400 px-2 py-1"
+      >
+        Delete
+      </button>
+    </li>
+  );
+}
 
 export default function TasksPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const timeZone = user?.timeZone || "Europe/Istanbul";
+  const timeFormat = user?.timeFormat || "H24";
+
+  const [filters, setFilters] = useState(() => filtersFromSearch(searchParams));
   const [tasks, setTasks] = useState([]);
-  const [allTags, setAllTags] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [tagInputs, setTagInputs] = useState({});
 
-  const [filterType, setFilterType] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
-  const [filterTag, setFilterTag] = useState("");
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  // seriesId -> { loading, tasks } for expanded series
+  const [expanded, setExpanded] = useState({});
+  // { kind: "task" | "series", id, label } while the delete dialog is open
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const requestId = useRef(0);
 
+  const buildParams = useCallback(
+    (offset) => {
+      const params = {
+        collapseSeries: true,
+        limit: PAGE_SIZE,
+        offset,
+        today: getTodayInTimezone(timeZone),
+      };
+      if (filters.q.trim()) params.q = filters.q.trim();
+      if (filters.type) params.type = filters.type;
+      if (filters.timeType) params.timeType = filters.timeType;
+      if (filters.priority) params.priority = filters.priority;
+      if (filters.tags.length > 0) params.tags = filters.tags.join(",");
+      if (filters.pinnedOnly) params.isPinned = true;
+      if (filters.from) params.from = filters.from;
+      if (filters.to) params.to = filters.to;
+      // The backend shows completed tasks unless it is told "false" explicitly
+      params.showCompleted = filters.showCompleted;
+      return params;
+    },
+    [filters, timeZone]
+  );
+
+  // Reload from the first page whenever a filter changes (debounced, so typing is cheap)
   useEffect(() => {
-    fetchTasks();
-    fetchTags();
-  }, [filterType, filterPriority, filterTag, showCompleted, filterFrom, filterTo]);
-
-  const fetchTasks = async () => {
-    try {
+    const id = ++requestId.current;
+    const timer = setTimeout(async () => {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (showCompleted) params.append("showCompleted", "true");
-      if (filterType) params.append("category", filterType);
-      if (filterPriority) params.append("priority", filterPriority);
-      if (filterTag) params.append("tags", filterTag);
-      if (filterFrom) params.append("from", filterFrom);
-      if (filterTo) params.append("to", filterTo);
-      params.append("limit", "50");
+      setError("");
+      try {
+        const res = await api.get("/tasks", { params: buildParams(0) });
+        if (id !== requestId.current) return;
+        setTasks(res.data.data || []);
+        setTotal(res.data.meta?.total ?? 0);
+        setHasMore(Boolean(res.data.meta?.hasMore));
+        setExpanded({});
+      } catch {
+        if (id === requestId.current) setError("Failed to load tasks.");
+      } finally {
+        if (id === requestId.current) setLoading(false);
+      }
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [buildParams]);
 
-      const response = await api.get(`/tasks?${params.toString()}`);
-      setTasks(response.data.data || []); 
-    } catch (err) {
-      setError("Failed to load tasks.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTags = async () => {
+  const reload = async () => {
     try {
-      const response = await api.get("/tags");
-      setAllTags(response.data.tags || []);
-    } catch (err) {
-      console.error("Failed to load tags", err);
+      const res = await api.get("/tasks", { params: buildParams(0) });
+      setTasks(res.data.data || []);
+      setTotal(res.data.meta?.total ?? 0);
+      setHasMore(Boolean(res.data.meta?.hasMore));
+      setExpanded({});
+    } catch {
+      setError("Failed to load tasks.");
     }
   };
 
-  const toggleTaskCompletion = async (task) => {
-    if (task.isRecurring) {
-      toast.error("Recurring tasks must be completed per-occurrence from the Calendar page.");
-      return;
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await api.get("/tasks", { params: buildParams(tasks.length) });
+      setTasks((prev) => [...prev, ...(res.data.data || [])]);
+      setHasMore(Boolean(res.data.meta?.hasMore));
+    } catch {
+      toast.error("Failed to load more tasks.");
+    } finally {
+      setLoadingMore(false);
     }
+  };
+
+  // ── Row updates ──
+  const patchTask = (taskId, patch) =>
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+
+  const patchSeriesRows = (seriesId, patch) =>
+    setTasks((prev) => prev.map((t) => (t.seriesId === seriesId ? { ...t, ...patch } : t)));
+
+  const toggleCompletion = async (task) => {
+    patchTask(task.id, { isCompleted: !task.isCompleted });
     try {
       await api.patch(`/tasks/${task.id}/toggle`);
-      setTasks(tasks.map((t) =>
-        t.id === task.id ? { ...t, isCompleted: !t.isCompleted } : t
-      ));
-    } catch (err) {
+    } catch {
+      patchTask(task.id, { isCompleted: task.isCompleted });
       toast.error("Failed to update task status.");
     }
   };
 
-  const toggleTaskPin = async (task) => {
+  const togglePin = async (task) => {
     const next = !task.isPinned;
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isPinned: next } : t)));
+    const apply = (value) => {
+      if (task.seriesId != null) {
+        patchSeriesRows(task.seriesId, { isPinned: value });
+        setExpanded((prev) =>
+          prev[task.seriesId]?.tasks
+            ? {
+                ...prev,
+                [task.seriesId]: {
+                  ...prev[task.seriesId],
+                  tasks: prev[task.seriesId].tasks.map((t) => ({ ...t, isPinned: value })),
+                },
+              }
+            : prev
+        );
+      } else {
+        patchTask(task.id, { isPinned: value });
+      }
+    };
+    apply(next);
     try {
       await setTaskPinned(task.id, next);
-    } catch (err) {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isPinned: !next } : t)));
+    } catch {
+      apply(!next);
       toast.error("Failed to update pin.");
     }
   };
 
-  const requestDeleteTask = (taskId) => setConfirmDeleteId(taskId);
-
-  const confirmDeleteTask = async () => {
-    const taskId = confirmDeleteId;
-    setConfirmDeleteId(null);
-    if (!taskId) return;
-
+  // ── Series expansion ──
+  const toggleExpand = async (seriesId) => {
+    if (expanded[seriesId]) {
+      setExpanded((prev) => withoutKey(prev, seriesId));
+      return;
+    }
+    setExpanded((prev) => ({ ...prev, [seriesId]: { loading: true, tasks: [] } }));
     try {
-      await api.delete(`/tasks/${taskId}`);
-      setTasks(tasks.filter((task) => task.id !== taskId));
-      fetchTags();
-      toast.success("Task deleted.");
-    } catch (err) {
-      toast.error("Failed to delete task.");
+      const res = await api.get(`/series/${seriesId}`);
+      setExpanded((prev) => ({ ...prev, [seriesId]: { loading: false, tasks: res.data.data.tasks } }));
+    } catch {
+      toast.error("Failed to load the series.");
+      setExpanded((prev) => withoutKey(prev, seriesId));
     }
   };
 
-  const handleAddTagToTask = async (taskId, tagName) => {
-    const trimmedTag = tagName?.trim();
-    if (!trimmedTag) return;
-
+  const toggleOccurrence = async (seriesId, occurrence) => {
+    const setDone = (value) => {
+      setExpanded((prev) => ({
+        ...prev,
+        [seriesId]: {
+          ...prev[seriesId],
+          tasks: prev[seriesId].tasks.map((t) => (t.id === occurrence.id ? { ...t, isCompleted: value } : t)),
+        },
+      }));
+      // Keep the "n/total done" counter on the collapsed row in step
+      const delta = value ? 1 : -1;
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.seriesId === seriesId && t.seriesInfo
+            ? { ...t, seriesInfo: { ...t.seriesInfo, completed: t.seriesInfo.completed + delta } }
+            : t
+        )
+      );
+    };
+    setDone(!occurrence.isCompleted);
     try {
-      const response = await api.post(`/tasks/${taskId}/tags`, { name: trimmedTag });
-      const updatedTask = response.data.data;
-      setTasks(tasks.map(task => task.id === taskId ? updatedTask : task));
-      setTagInputs({ ...tagInputs, [taskId]: "" });
-      fetchTags();
-    } catch (err) {
-      toast.error("Failed to add tag: " + (err.response?.data?.error?.message || "Unknown error"));
+      await api.patch(`/tasks/${occurrence.id}/toggle`);
+    } catch {
+      setDone(occurrence.isCompleted);
+      toast.error("Failed to update task status.");
     }
   };
+
+  // ── Delete ──
+  const confirmDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    try {
+      if (target.kind === "series") await api.delete(`/series/${target.id}`);
+      else await api.delete(`/tasks/${target.id}`);
+      toast.success(target.kind === "series" ? "Series deleted." : "Task deleted.");
+      await reload(); // a removed occurrence can change which one stands for its series
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to delete."));
+    }
+  };
+
+  // ── Tags ──
+  const addTag = async (task, name) => {
+    try {
+      if (task.seriesId != null) await api.post(`/series/${task.seriesId}/tags`, { name });
+      else await api.post(`/tasks/${task.id}/tags`, { name });
+      const tags = [...(task.tags || []), name];
+      if (task.seriesId != null) patchSeriesRows(task.seriesId, { tags });
+      else patchTask(task.id, { tags });
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to add tag."));
+    }
+  };
+
+  // Removing needs the tag id; task.tags only carries names
+  const removeTag = async (task, name) => {
+    try {
+      const lookup = await api.get("/tags", { params: { filter: name, limit: 50 } });
+      const tag = (lookup.data.tags || []).find((t) => t.name === name);
+      if (!tag) throw new Error("tag not found");
+      await api.delete(`/tasks/${task.id}/tags/${tag.id}`);
+      patchTask(task.id, { tags: (task.tags || []).filter((t) => t !== name) });
+    } catch {
+      toast.error("Failed to remove tag.");
+    }
+  };
+
+  const editOccurrence = (task) => navigate(`/tasks/edit/${task.id}`);
+
+  // Pinned first within what is loaded; the server order (by date) is kept otherwise
+  const rows = [...tasks].sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
 
   return (
-    <div className="max-w-4xl mx-auto mt-10 p-4 mb-20">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-2 md:p-4 mb-20">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-slate-100">Tasks</h1>
-        {/* + New Task ve Logout butonları bu kısımdan tamamen kaldırıldı */}
+        <Link
+          to="/tasks/new"
+          className="md:hidden px-3 py-1.5 rounded-md text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition"
+        >
+          + New Task
+        </Link>
       </div>
 
-      {error && <div className="p-3 mb-4 bg-red-900/50 border border-red-500 text-red-200 rounded">{error}</div>}
-
-      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 shadow-md mb-6 flex flex-col gap-3">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Category</label>
-            <select 
-              value={filterType} 
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
-            >
-              <option value="">All Categories</option>
-              <option value="COURSE">Course</option>
-              <option value="EXAM">Exam</option>
-              <option value="HOMEWORK">Homework</option>
-              <option value="CUSTOM">Custom</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Priority</label>
-            <select 
-              value={filterPriority} 
-              onChange={(e) => setFilterPriority(e.target.value)}
-              className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
-            >
-              <option value="">All Priorities</option>
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">From Date</label>
-            <input 
-              type="date"
-              value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
-              className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">To Date</label>
-            <input 
-              type="date"
-              value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
-              className="w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm"
-            />
-          </div>
-        </div>
-
-        {allTags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-700">
-            <span className="text-xs text-slate-400 mr-2 font-medium">Filter by Tag:</span>
-            <button
-              onClick={() => setFilterTag("")}
-              className={`px-2 py-0.5 text-xs rounded border transition ${!filterTag ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-            >
-              All Tags
-            </button>
-            {allTags.map((tag) => (
-              <button
-                key={tag.id}
-                onClick={() => setFilterTag(tag.name)}
-                className={`px-2 py-0.5 text-xs rounded border transition ${filterTag === tag.name ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
-              >
-                #{tag.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-end pt-1">
-          <label className="flex items-center gap-2 cursor-pointer p-1">
-            <input 
-              type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
-              className="w-4 h-4 accent-blue-600"
-            />
-            <span className="text-xs text-slate-300 font-medium">Show Completed Tasks</span>
-          </label>
-        </div>
-      </div>
-
-      <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-xl">
-        <h2 className="text-xl mb-4 border-b border-slate-600 pb-2 font-semibold text-slate-100">My Tasks</h2>
-        
-        {loading ? (
-          <p className="text-slate-400 text-center py-6">Loading tasks...</p>
-        ) : tasks.length === 0 ? (
-          <p className="text-slate-400 text-center py-6">No tasks found matching your filters.</p>
-        ) : (
-          <ul className="flex flex-col gap-4">
-            {[...tasks].sort((a, b) => Number(b.isPinned) - Number(a.isPinned)).map((task) => (
-              <li key={task.id} className={`p-4 rounded-md border transition ${task.isCompleted ? 'bg-slate-900/50 border-slate-800 opacity-75' : 'bg-slate-700 border-slate-600'}`}>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-start gap-4">
-                    <input 
-                      type="checkbox" 
-                      checked={task.isCompleted}
-                      onChange={() => toggleTaskCompletion(task)}
-                      className="w-5 h-5 mt-1 cursor-pointer accent-blue-600"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className={`font-semibold text-base ${task.isCompleted ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
-                          {task.title}
-                        </p>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                          task.priority === 'HIGH' ? 'bg-red-900 text-red-200' :
-                          task.priority === 'MEDIUM' ? 'bg-amber-900 text-amber-200' : 'bg-green-900 text-green-200'
-                        }`}>
-                          {task.priority}
-                        </span>
-                      </div>
-
-                      {task.description && (
-                        <p className="text-sm text-slate-300 mt-1">{task.description}</p>
-                      )}
-
-                      <div className="text-xs text-slate-400 mt-2 flex flex-wrap gap-2 items-center">
-                        <span className="uppercase font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-900">{task.type}</span>
-                        <span>•</span>
-                        <span>Time: {task.timeType}</span>
-                        <span>•</span>
-                        {task.timeType === "DATE_RANGE" ? (
-                          <span>{task.rangeStartDate?.slice(0, 10)} {task.rangeStartTime || ""} &rarr; {task.rangeEndDate?.slice(0, 10)} {task.rangeEndTime || ""}</span>
-                        ) : (
-                          <span>{task.date ? task.date.slice(0, 10) : "No date"} {task.startTime ? `(${task.startTime} - ${task.endTime})` : ""}</span>
-                        )}
-
-                        {task.isRecurring && (
-                          <span className="bg-purple-950 text-purple-300 px-2 py-0.5 rounded border border-purple-900 text-[10px] font-semibold">
-                            Recurring ({task.recurrencePattern})
-                          </span>
-                        )}
-                      </div>
-
-                      {task.schedules && task.schedules.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {task.schedules.map((s, idx) => (
-                            <span key={idx} className="text-[10px] bg-slate-900 text-slate-300 px-2 py-0.5 rounded border border-slate-600">
-                              {s.dayOfWeek}: {s.startTime} - {s.endTime}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {task.tags && task.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {task.tags.map((tag, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-slate-900 text-blue-400 text-xs rounded border border-slate-600">
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => toggleTaskPin(task)}
-                    className={`p-2 rounded transition hover:bg-slate-600/50 ${task.isPinned ? 'opacity-100' : 'opacity-40 grayscale hover:opacity-90'}`}
-                    title={task.isPinned ? "Unpin from dashboard" : "Pin to dashboard"}
-                  >
-                    📌
-                  </button>
-                  <button
-                    onClick={() => requestDeleteTask(task.id)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition"
-                    title="Delete"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  </div>
-                </div>
-
-                <div className="mt-3 pt-3 border-t border-slate-600/50 flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add new tag (e.g. urgent)..."
-                      value={tagInputs[task.id] || ""}
-                      onChange={(e) => setTagInputs({ ...tagInputs, [task.id]: e.target.value })}
-                      className="flex-1 p-1.5 text-sm rounded bg-slate-900 border border-slate-600 text-slate-100"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => handleAddTagToTask(task.id, tagInputs[task.id])}
-                      className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded transition"
-                    >
-                      Add Tag
-                    </button>
-                  </div>
-
-                  {allTags.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 mt-1">
-                      <span className="text-[11px] text-slate-400 mr-1">Existing tags:</span>
-                      {allTags.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => handleAddTagToTask(task.id, t.name)}
-                          className="text-[11px] px-2 py-0.5 bg-slate-900 hover:bg-blue-900/50 text-slate-300 rounded border border-slate-700 transition"
-                        >
-                          +{t.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-        
-        <ConfirmDialog
-          open={confirmDeleteId !== null}
-          title="Delete task?"
-          message="This task will be permanently deleted. This cannot be undone."
-          confirmLabel="Delete"
-          danger
-          onConfirm={confirmDeleteTask}
-          onCancel={() => setConfirmDeleteId(null)}
+      <div className="flex flex-col md:flex-row gap-4 items-start">
+        <FilterSidebar
+          filters={filters}
+          onChange={setFilters}
+          onReset={() => setFilters(DEFAULT_FILTERS)}
+          sections={{ search: true, dates: true }}
         />
 
+        <div className="flex-1 min-w-0 w-full">
+          {error && <div className="p-3 mb-4 bg-red-900/50 border border-red-500 text-red-200 rounded">{error}</div>}
+
+          <div className="bg-slate-800 p-4 md:p-6 rounded-lg border border-slate-700 shadow-xl">
+            <h2 className="text-xl mb-4 border-b border-slate-600 pb-2 font-semibold text-slate-100">
+              My Tasks
+              {!loading && <span className="ml-2 text-sm font-normal text-slate-400">({total})</span>}
+            </h2>
+
+            {loading ? (
+              <p className="text-slate-400 text-center py-6">Loading tasks...</p>
+            ) : rows.length === 0 ? (
+              <p className="text-slate-400 text-center py-6">No tasks found matching your filters.</p>
+            ) : (
+              <ul className="flex flex-col gap-4">
+                {rows.map((task) => {
+                  const isSeries = task.seriesId != null;
+                  const info = task.seriesInfo;
+                  const open = isSeries ? expanded[task.seriesId] : null;
+                  const allDone = isSeries && info ? info.completed >= info.total : task.isCompleted;
+
+                  return (
+                    <li
+                      key={task.id}
+                      className={`p-4 rounded-md border transition ${
+                        allDone ? "bg-slate-900/50 border-slate-800 opacity-75" : "bg-slate-700 border-slate-600"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex items-start gap-4 min-w-0">
+                          {!isSeries && task.isCompletable ? (
+                            <input
+                              type="checkbox"
+                              checked={task.isCompleted}
+                              onChange={() => toggleCompletion(task)}
+                              className="w-5 h-5 mt-1 cursor-pointer accent-blue-600"
+                            />
+                          ) : isSeries ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(task.seriesId)}
+                              className="w-5 h-5 mt-1 text-slate-300 hover:text-white text-xs"
+                              title={open ? "Hide occurrences" : "Show occurrences"}
+                              aria-expanded={Boolean(open)}
+                            >
+                              {open ? "▼" : "▶"}
+                            </button>
+                          ) : (
+                            <span className="w-5" />
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p
+                                className={`font-semibold text-base ${
+                                  allDone ? "text-slate-500 line-through" : "text-slate-100"
+                                }`}
+                              >
+                                {task.title}
+                              </p>
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                                  PRIORITY_STYLES[task.priority]
+                                }`}
+                              >
+                                {task.priority}
+                              </span>
+                            </div>
+
+                            {task.description && <p className="text-sm text-slate-300 mt-1">{task.description}</p>}
+
+                            <div className="text-xs text-slate-400 mt-2 flex flex-wrap gap-2 items-center">
+                              <span className="uppercase font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-900">
+                                {typeLabel(task.type)}
+                              </span>
+                              {isSeries && info ? (
+                                <>
+                                  <span className="bg-purple-950 text-purple-300 px-2 py-0.5 rounded border border-purple-900 text-[10px] font-semibold">
+                                    🔁 {PATTERN_LABELS[task.series?.pattern] || "Recurring"}
+                                  </span>
+                                  <span>
+                                    {info.completed}/{info.total} done
+                                  </span>
+                                  <span>•</span>
+                                  <span>
+                                    {info.firstDate} → {info.lastDate}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>•</span>
+                                  <span>{describeWhen(task, timeFormat) || "No date"}</span>
+                                </>
+                              )}
+                            </div>
+
+                            {isSeries && info && (
+                              <p className="text-xs text-slate-500 mt-1">Next: {describeWhen(task, timeFormat)}</p>
+                            )}
+
+                            <TagChips tags={task.tags} onRemove={isSeries ? null : (name) => removeTag(task, name)} />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <IconButton
+                            onClick={() => togglePin(task)}
+                            title={task.isPinned ? "Unpin from dashboard" : "Pin to dashboard"}
+                            className={task.isPinned ? "opacity-100" : "opacity-40 grayscale hover:opacity-90"}
+                          >
+                            📌
+                          </IconButton>
+                          <IconButton
+                            onClick={() =>
+                              navigate(isSeries ? `/tasks/edit/${task.id}?scope=series` : `/tasks/edit/${task.id}`)
+                            }
+                            title={isSeries ? "Edit the whole series" : "Edit"}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            ✎
+                          </IconButton>
+                          <IconButton
+                            onClick={() =>
+                              setPendingDelete(
+                                isSeries
+                                  ? { kind: "series", id: task.seriesId, label: task.title }
+                                  : { kind: "task", id: task.id, label: task.title }
+                              )
+                            }
+                            title={isSeries ? "Delete the whole series" : "Delete"}
+                            className="text-slate-400 hover:text-red-500 hover:bg-red-500/10"
+                          >
+                            <TrashIcon />
+                          </IconButton>
+                        </div>
+                      </div>
+
+                      {isSeries && open && (
+                        <div className="mt-3 pt-3 border-t border-slate-600/50">
+                          {open.loading ? (
+                            <p className="text-xs text-slate-400">Loading occurrences...</p>
+                          ) : (
+                            <ul className="flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
+                              {open.tasks.map((occurrence) => (
+                                <OccurrenceRow
+                                  key={occurrence.id}
+                                  task={occurrence}
+                                  timeFormat={timeFormat}
+                                  onToggle={(o) => toggleOccurrence(task.seriesId, o)}
+                                  onEdit={editOccurrence}
+                                  onDelete={(o) =>
+                                    setPendingDelete({
+                                      kind: "task",
+                                      id: o.id,
+                                      label: `${task.title} (${sliceDate(o.date)})`,
+                                    })
+                                  }
+                                />
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="mt-3 pt-3 border-t border-slate-600/50">
+                        <TagCombobox
+                          selectedTags={task.tags || []}
+                          hideChips
+                          onAdd={(name) => addTag(task, name)}
+                          placeholder={isSeries ? "Add a tag to the whole series..." : "Add a tag..."}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {hasMore && !loading && (
+              <div className="flex justify-center mt-4">
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-4 py-2 text-sm font-medium text-slate-200 bg-slate-700 hover:bg-slate-600 rounded border border-slate-600 transition disabled:opacity-60"
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={pendingDelete?.kind === "series" ? "Delete the whole series?" : "Delete task?"}
+        message={
+          pendingDelete?.kind === "series"
+            ? `“${pendingDelete?.label}” and every one of its occurrences will be permanently deleted.`
+            : `“${pendingDelete?.label}” will be permanently deleted. This cannot be undone.`
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

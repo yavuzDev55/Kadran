@@ -1,6 +1,7 @@
 // src/features/auth/auth.validator.js
 
 import { ValidationError } from '../../shared/utils/customErrors.js';
+import { isValidTimezone } from '../../shared/utils/dateUtils.js';
 
 export const validateRegister = (req, res, next) => {
   try {
@@ -21,6 +22,10 @@ export const validateRegister = (req, res, next) => {
       if (password.length < 8) errors.push('Password must be at least 8 characters');
       if (!/[A-Z]/.test(password)) errors.push('Password must contain an uppercase letter');
       if (!/[0-9]/.test(password)) errors.push('Password must contain a number');
+    }
+
+    if (timeZone !== undefined && timeZone !== null && !isValidTimezone(timeZone)) {
+      errors.push('Invalid time zone');
     }
 
     if (errors.length > 0) throw new ValidationError('Register validation failed', { errors });

@@ -23,6 +23,9 @@ const VALID_WEEK_STARTS = ['MONDAY', 'SUNDAY'];
 const VALID_TIME_FORMATS = ['H24', 'H12'];
 const VALID_VIEWS = ['WEEK', 'MONTH'];
 
+// "Foo@x.com" and "foo@x.com" are the same account
+const normalizeEmail = (email) => email.trim().toLowerCase();
+
 const generateToken = (user) =>
   jwt.sign(
     { sub: user.id, email: user.email },
@@ -42,12 +45,13 @@ const serializeUser = (user) => ({
   hideCompleted: user.hideCompleted,
 });
 
-export const registerService = async (email, password, timeZone = 'Europe/Istanbul') => {
+export const registerService = async (rawEmail, password, timeZone) => {
+  const email = normalizeEmail(rawEmail);
   const existing = await findUserByEmail(email);
   if (existing) throw new ConflictError('Email already registered');
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const user = await createUser(email, hashedPassword, timeZone);
+  const user = await createUser(email, hashedPassword, timeZone || 'Europe/Istanbul');
   const token = generateToken(user);
 
   return {
@@ -56,8 +60,8 @@ export const registerService = async (email, password, timeZone = 'Europe/Istanb
   };
 };
 
-export const loginService = async (email, password) => {
-  const user = await findUserByEmail(email);
+export const loginService = async (rawEmail, password) => {
+  const user = await findUserByEmail(normalizeEmail(rawEmail));
   if (!user) throw new AuthenticationError('Invalid email or password');
 
   const isValid = await bcrypt.compare(password, user.password);

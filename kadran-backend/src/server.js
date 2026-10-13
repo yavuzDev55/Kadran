@@ -11,6 +11,7 @@ import authRouter from './features/auth/auth.router.js';
 import tagRouter from './features/tag/tag.router.js';
 import taskRouter from './features/task/task.router.js';
 import metaRouter from './features/meta/meta.router.js';
+import seriesRouter from './features/recurring/series.router.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/auth', authRouter);
 // Protected routes — authMiddleware SADECE burada, router'larda tekrar yok
 app.use('/tags',  authMiddleware, tagRouter);
 app.use('/tasks', authMiddleware, taskRouter);
+app.use('/series', authMiddleware, seriesRouter);
 
 app.use('/meta', metaRouter);
 

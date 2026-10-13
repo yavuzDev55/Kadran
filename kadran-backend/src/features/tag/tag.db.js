@@ -1,12 +1,12 @@
 // src/features/tag/tag.db.js
-// v3: findOrCreateTag and findTagsByUser now compare names in their
-// lowercase-normalized form (see v3 doc §3.2).
+// findOrCreateTag and findTagsByUser now compare names in their
+// lowercase-normalized form .
 
 import prisma from '../../config/database.js';
 
 const normalizeTagName = (name) => name.trim().toLowerCase();
 
-export const findTagsByUser = (userId, filter = null) => {
+export const findTagsByUser = (userId, filter = null, limit = null) => {
   const where = { userId };
 
   if (filter) {
@@ -16,6 +16,7 @@ export const findTagsByUser = (userId, filter = null) => {
   return prisma.tag.findMany({
     where,
     orderBy: { name: 'asc' },
+    ...(limit && { take: limit }),
   });
 };
 

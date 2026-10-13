@@ -1,132 +1,131 @@
 // src/utils/dashboardUtils.js
-// Pure helpers for the dashboard (home) page. All "today" / "now" values are
-// computed in the user's IANA timezone, never the browser's.
+// Pure helpers for the dashboard (home) page. All "today" / "now" values come from the user's
+// IANA timezone (see dateUtils), never from the browser's.
 
-const OPEN_ENDED_FALLBACK_MINUTES = 60;
-
-export const timeToMinutes = (time) => {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-};
-
-/** 'YYYY-MM-DD' for the given instant, in the given timezone. */
-export const getTodayInTimezone = (timeZone, date = new Date()) => {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(date);
-  } catch {
-    return date.toISOString().slice(0, 10);
-  }
-};
-
-/** Minutes since local midnight, in the given timezone. */
-export const getNowMinutesInTimezone = (timeZone, date = new Date()) => {
-  try {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(date);
-    const hour = Number(parts.find((p) => p.type === "hour").value) % 24;
-    const minute = Number(parts.find((p) => p.type === "minute").value);
-    return hour * 60 + minute;
-  } catch {
-    return date.getHours() * 60 + date.getMinutes();
-  }
-};
-
-export const addDaysToDateStr = (dateStr, days) => {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-};
-
-export const formatDateLabel = (dateStr, todayStr) => {
-  if (!dateStr) return "";
-  if (dateStr === todayStr) return "Today";
-  if (dateStr === addDaysToDateStr(todayStr, 1)) return "Tomorrow";
-  return dateStr;
-};
+import { addDays, diffDays, sliceDate, timeToMinutes } from './dateUtils.js';
 
 /**
- * Wraps a raw backend task (no calendar occurrence) in the same shape that
- * normalizeTasksToEvents produces, so panels can render both with one component.
- * Used for ANYTIME and pinned tasks.
+ * A task shaped for the dashboard lists. `date` is the day the item is listed under: the task's
+ * own date, or for a multi-day task the day it starts (or today, when listing running ones).
  */
-export const taskToItem = (task) => ({
+export const taskToItem = (task, date) => ({
   id: `task-${task.id}`,
   taskId: task.id,
+  seriesId: task.seriesId ?? null,
   title: task.title,
   type: task.type,
   timeType: task.timeType,
   priority: task.priority,
-  isCompleted: task.isCompleted || false,
+  isCompleted: Boolean(task.isCompleted),
   isCompletable: task.isCompletable !== false,
-  isPinned: task.isPinned || false,
+  isPinned: Boolean(task.isPinned),
   effectiveColor: task.effectiveColor || task.color || null,
-  // DATE_RANGE tasks have no `date`; use the range start so they sort and label sensibly
-  date: (task.date || task.rangeStartDate)?.slice(0, 10) ?? null,
+  date: date !== undefined ? date : sliceDate(task.date) ?? sliceDate(task.rangeStartDate),
   startTime: task.startTime || null,
   endTime: task.endTime || null,
-  rangeEndDate: task.rangeEndDate ? task.rangeEndDate.slice(0, 10) : null,
+  rangeStartDate: sliceDate(task.rangeStartDate),
+  rangeEndDate: sliceDate(task.rangeEndDate),
   originalTask: task,
 });
 
-/** All-day / untimed items first, then by start time. */
+/**
+ * Items for the agenda: every dated task that falls in [todayStr, endStr]. A multi-day task is
+ * listed once — on today when it is already running, otherwise on the day it starts.
+ */
+export const buildAgendaItems = (tasks, todayStr, endStr) => {
+  const items = [];
+  tasks.forEach((task) => {
+    if (task.timeType === 'ANY_TIME') return;
+
+    if (task.timeType === 'MULTI_DAY') {
+      const start = sliceDate(task.rangeStartDate);
+      const end = sliceDate(task.rangeEndDate);
+      if (!start || !end || end < todayStr || start > endStr) return;
+      items.push(taskToItem(task, start < todayStr ? todayStr : start));
+      return;
+    }
+
+    const date = sliceDate(task.date);
+    if (date && date >= todayStr && date <= endStr) items.push(taskToItem(task, date));
+  });
+  return items;
+};
+
+/** Minute of the day an item is anchored to: start time, or the due time of a deadline. */
+export const getItemMinutes = (item) => {
+  if (item.timeType === 'TIMED' || item.timeType === 'OPEN_ENDED') {
+    return item.startTime ? timeToMinutes(item.startTime) : null;
+  }
+  if (item.timeType === 'DEADLINE') return item.endTime ? timeToMinutes(item.endTime) : null;
+  return null;
+};
+
+/** Items without a clock time first (multi-day), then by time. */
 export const sortByTime = (items) =>
   [...items].sort((a, b) => {
-    if (!a.startTime && !b.startTime) return 0;
-    if (!a.startTime) return -1;
-    if (!b.startTime) return 1;
-    return a.startTime.localeCompare(b.startTime);
+    const ma = getItemMinutes(a);
+    const mb = getItemMinutes(b);
+    if (ma === null && mb === null) return 0;
+    if (ma === null) return -1;
+    if (mb === null) return 1;
+    return ma - mb;
   });
 
 export const sortByDateThenTime = (items) =>
   [...items].sort((a, b) => {
-    const dateA = a.date || "9999-99-99"; // undated items go last
-    const dateB = b.date || "9999-99-99";
+    const dateA = a.date || '9999-99-99'; // undated items go last
+    const dateB = b.date || '9999-99-99';
     if (dateA !== dateB) return dateA.localeCompare(dateB);
-    return (a.startTime || "").localeCompare(b.startTime || "");
+    return sortByTime([a, b])[0] === a ? (a === b ? 0 : -1) : 1;
   });
 
-/** Start/end of an event in minutes since midnight; end is null when open-ended. */
-export const getEventWindow = (event) => {
-  if (!event.startTime) return null;
-  const start = timeToMinutes(event.startTime);
-  if (event.timeType === "TIMED" && event.endTime) {
-    let end = timeToMinutes(event.endTime);
-    if (end <= start) end += 24 * 60; // crosses midnight
-    return { start, end };
-  }
-  return { start, end: null };
-};
-
-export const isEventActive = (event, nowMinutes) => {
-  if (event.isCompleted) return false;
-  if (event.timeType !== "TIMED" && event.timeType !== "TIMED_OPEN") return false;
-
-  const window = getEventWindow(event);
-  if (!window || nowMinutes < window.start) return false;
-
-  if (window.end !== null) return nowMinutes < window.end;
-
-  // TIMED_OPEN: stays active until completed. If it cannot be completed,
-  // fall back to a fixed window so it does not stay "active" all day.
-  if (event.isCompletable !== false) return true;
-  return nowMinutes < window.start + OPEN_ENDED_FALLBACK_MINUTES;
-};
-
 /**
- * DATE_RANGE tasks that started before `todayStr` and are still running.
- * normalizeTasksToEvents only places a range on its start date, so without this
- * a multi-day task disappears from the dashboard after its first day.
- * Returned items are dated today so they sort and group with today's items.
+ * Only TIMED and MULTI_DAY tasks count as "active":
+ *   TIMED      today, between its start and end time
+ *   MULTI_DAY  today lies inside its day range
+ * Completed tasks are never active.
  */
-export const getOngoingRangeItems = (tasks, todayStr) =>
-  tasks
-    .filter((t) => t.timeType === "DATE_RANGE" && !t.isRecurring && t.rangeStartDate && t.rangeEndDate)
-    .filter((t) => t.rangeStartDate.slice(0, 10) < todayStr && t.rangeEndDate.slice(0, 10) >= todayStr)
-    .map((t) => ({ ...taskToItem(t), date: todayStr }));
+export const isItemActive = (item, todayStr, nowMinutes) => {
+  if (item.isCompleted) return false;
+
+  if (item.timeType === 'MULTI_DAY') {
+    return Boolean(item.rangeStartDate && item.rangeEndDate) &&
+      item.rangeStartDate <= todayStr && todayStr <= item.rangeEndDate;
+  }
+
+  if (item.timeType === 'TIMED') {
+    if (item.date !== todayStr || !item.startTime || !item.endTime) return false;
+    const start = timeToMinutes(item.startTime);
+    const end = timeToMinutes(item.endTime);
+    return nowMinutes >= start && (end > start ? nowMinutes < end : true); // an end before the start runs to midnight
+  }
+
+  return false;
+};
+
+/** "Day 2 of 5" for a running multi-day task. */
+export const getMultiDayProgress = (item, todayStr) => {
+  const total = diffDays(item.rangeStartDate, item.rangeEndDate) + 1;
+  const day = Math.min(total, Math.max(1, diffDays(item.rangeStartDate, todayStr) + 1));
+  return { day, total, daysLeft: total - day };
+};
+
+/** The next not-yet-started item of today (timed start or deadline due time). */
+export const findNextToday = (todayItems, nowMinutes) =>
+  sortByTime(
+    todayItems.filter((item) => {
+      if (item.isCompleted) return false;
+      const minutes = getItemMinutes(item);
+      return minutes !== null && minutes > nowMinutes;
+    })
+  )[0];
+
+export const formatDateLabel = (dateStr, todayStr) => {
+  if (!dateStr) return '';
+  if (dateStr === todayStr) return 'Today';
+  if (dateStr === addDays(todayStr, 1)) return 'Tomorrow';
+  return dateStr;
+};
 
 /** Groups dated items by day: [{ date, items }], ascending. Undated items are skipped. */
 export const groupItemsByDate = (items) => {
@@ -143,10 +142,11 @@ export const groupItemsByDate = (items) => {
 
 /** "Today · Tuesday 2026-10-06", "Wednesday 2026-10-07" */
 export const formatDayHeading = (dateStr, todayStr) => {
-  const weekday = new Date(`${dateStr}T00:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
+  const weekday = new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    timeZone: 'UTC',
   });
-  const prefix = dateStr === todayStr ? "Today · " : dateStr === addDaysToDateStr(todayStr, 1) ? "Tomorrow · " : "";
+  const prefix =
+    dateStr === todayStr ? 'Today · ' : dateStr === addDays(todayStr, 1) ? 'Tomorrow · ' : '';
   return `${prefix}${weekday} ${dateStr}`;
 };

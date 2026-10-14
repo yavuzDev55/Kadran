@@ -20,7 +20,7 @@ sense of time.
 - **Task-type rules** — course, homework, exam and custom tasks each allow different time models, recurrence and defaults, see [Task types](#task-types)
 - **Recurring tasks** — daily, weekly (chosen weekdays, each with its own time), or monthly (a day of the month or the last day). The end date is required and at most one year after the start. Every occurrence is a real task with its own completion, edit and delete
 - **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinning a series pins every occurrence
-- **Tags** — added through a search box that suggests existing tags while you type; custom colors and completability per task
+- **Tags** — added through a search box that suggests existing tags while you type; task colors come from a shared preset palette, and completability follows the task-type rules
 - **User preferences** — week start, calendar hours, 12/24-hour clock, default view, hide completed, timezone
 
 **Design note:** KADRAN intentionally does **not** detect or block schedule
@@ -178,8 +178,8 @@ task is created (`kadran-backend/src/features/recurring/recurring.service.js`).
 - `WEEKLY` takes `weekDays` and optional per-weekday clock times in `slots`; `MONTHLY` takes `monthDay`
   `1`–`31` (clamped to short months) or `-1` for the last day
 - Only `TIMED` and `OPEN_ENDED` tasks of a type that allows recurrence can repeat
-- Each occurrence has its own completion and delete. Only its day and time can be edited; the
-  shared fields (title, priority, color, ...) are edited on the series (`PATCH /series/:id`)
+- Each occurrence has its own completion and delete. Only its day and time can be edited; shared
+  fields (title, description, priority, color, ...) are edited on the series (`PATCH /series/:id`)
 - Pinning is applied to the whole series
 
 ### Other task fields
@@ -230,8 +230,9 @@ a series), `limit` (default 50, at most `MAX_LIST_LIMIT`), `offset`.
 
 ## Security notes
 
-- Passwords are hashed with bcrypt, and task routes check that the task belongs to the requesting user.
-- The JWT is stored in `localStorage`, which is exposed to XSS. That is acceptable for this project; a production deployment should use `HttpOnly` cookies with refresh tokens.
+- Passwords are hashed with bcrypt, and task and series operations check that requested records belong to the authenticated user.
+- The frontend stores the JWT in `localStorage`. A successful XSS attack can therefore read it; consider an `HttpOnly`, `Secure`, `SameSite` cookie-based session design before production deployment.
+- Access tokens expire after seven days. Password changes do not currently revoke already-issued tokens; they can remain usable until expiry.
 - Never commit `.env`, and use a long random `JWT_SECRET`.
 
 ---
@@ -241,5 +242,18 @@ a series), `limit` (default 50, at most `MAX_LIST_LIMIT`), `offset`.
 - The calendar loads up to 500 tasks per visible range.
 - On the dashboard, a timed task that crosses midnight counts as active only until midnight.
 - A series cannot change its type, time model or repeat rule after it is created; delete it and create a new one.
-- A tag cannot be removed from a whole series, only from individual non-recurring tasks.
-- There is no seed script. Backend tests (`npm test`) cover recurrence, task rules and validation; there are no frontend tests yet.
+- A tag can be added to a whole series, but there is no series-wide tag removal endpoint.
+- There is no seed script. Backend tests (`npm test`) run without a database and cover recurrence, task rules, task-service behavior and query validation; there are no frontend tests yet.
+
+## Technical follow-ups
+
+These are implementation issues to address before relying on the affected behavior in production:
+
+- **Settings validation:** `PATCH /auth/me` checks that `dayStartHour` is before `dayEndHour` only when both are included in the same request. Validate the merged values against the user's existing settings. The `hideCompleted` setting also needs a strict boolean check; coercing arbitrary values with `Boolean(...)` can turn the string `"false"` into `true`.
+- **Registration input types:** validate that `email` is a string before calling string methods such as `trim()`. A non-string value can currently become an internal server error instead of a validation response.
+- **Collapsed-series list performance:** `GET /tasks?collapseSeries=true` fetches all matching task rows and performs grouping and pagination in application memory. This can become expensive for users with many tasks or long-running series; move as much of the work and paging as practical to the database.
+- **Atomic task creation:** creating a task and attaching its tags uses separate database operations. A failure while resolving or linking tags can leave the task created without the requested tags. Consider wrapping the related writes in a database transaction.
+- **Build size:** the current frontend production build emits a JavaScript chunk larger than Vite's 500 kB warning threshold. Consider route-level code splitting if bundle size or initial load time becomes a concern.
+- **Project housekeeping:** the repository-root `package-lock.json` is empty and there is no root `package.json`; remove the lockfile if it is not intentionally reserved for a future root package. Review the frontend starter README and unreferenced starter assets (`react.svg`, `vite.svg`, `hero.png`) for removal or replacement.
+
+The backend test suite, frontend lint and production build have all passed during review. The build currently reports the large-chunk warning noted above.

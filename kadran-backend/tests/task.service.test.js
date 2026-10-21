@@ -47,6 +47,22 @@ test('recurring task becomes one real task per occurrence, linked to one series'
   assert.equal(dbState.series[0].weekDays, 'MONDAY,WEDNESDAY');
 });
 
+test('recurring description belongs to the series, while occurrence notes belong to individual tasks', async () => {
+  const { series } = await taskService.createTask(USER, { ...weekly(), description: 'Weekly lecture' });
+  assert.equal(dbState.series[0].description, 'Weekly lecture');
+  assert.ok(dbState.tasks.every((task) => task.description === null));
+
+  const [first, second] = dbState.tasks;
+  await taskService.updateTask(USER, first.id, { description: 'Classroom equipment issue' });
+  assert.equal(dbState.tasks.find((task) => task.id === first.id).description, 'Classroom equipment issue');
+  assert.equal(dbState.tasks.find((task) => task.id === second.id).description, null);
+  assert.equal(dbState.series[0].description, 'Weekly lecture');
+
+  const updated = await seriesService.updateSeriesService(USER, series.id, { description: 'Updated lecture details' });
+  assert.equal(updated.description, 'Updated lecture details');
+  assert.equal(dbState.tasks.find((task) => task.id === first.id).description, 'Classroom equipment issue');
+});
+
 test('weekly series with a different time on each weekday', async () => {
   await taskService.createTask(USER, {
     ...weekly({ slots: { MONDAY: { startTime: '09:00', endTime: '10:00' }, WEDNESDAY: { startTime: '13:00', endTime: '15:30' } } }),
@@ -67,7 +83,7 @@ test('a rule with no matching day is rejected and nothing is stored', async () =
 });
 
 // ─── editing one occurrence ───
-test('an occurrence can only change day and time', async () => {
+test('an occurrence can change its day, time and note without changing its siblings', async () => {
   await taskService.createTask(USER, weekly());
   const [first, second] = dbState.tasks;
 

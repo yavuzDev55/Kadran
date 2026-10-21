@@ -178,8 +178,11 @@ task is created (`kadran-backend/src/features/recurring/recurring.service.js`).
 - `WEEKLY` takes `weekDays` and optional per-weekday clock times in `slots`; `MONTHLY` takes `monthDay`
   `1`–`31` (clamped to short months) or `-1` for the last day
 - Only `TIMED` and `OPEN_ENDED` tasks of a type that allows recurrence can repeat
-- Each occurrence has its own completion and delete. Only its day and time can be edited; shared
-  fields (title, description, priority, color, ...) are edited on the series (`PATCH /series/:id`)
+- The series description is stored on `TaskSeries`. Every occurrence has its own optional `Task.description`
+  note; editing that note changes only that occurrence. Both descriptions are shown separately in the
+  recurring task list and calendar details.
+- Each occurrence has its own completion and delete. Only its day, time and note can be edited; shared
+  fields (title, series description, priority, color, ...) are edited on the series (`PATCH /series/:id`)
 - Pinning is applied to the whole series
 
 ### Other task fields
@@ -207,7 +210,7 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 | GET | `/tasks` | List tasks |
 | GET | `/tasks/:id` | Single task |
 | POST | `/tasks` | Create task |
-| PATCH | `/tasks/:id` | Update task; partial bodies are accepted (e.g. `{ "isPinned": true }`). For one occurrence of a series only `date`, `startTime`, `endTime` and `isPinned` are accepted |
+| PATCH | `/tasks/:id` | Update task; partial bodies are accepted (e.g. `{ "isPinned": true }`). For one occurrence of a series only `date`, `startTime`, `endTime`, `isPinned` and `description` are accepted |
 | DELETE | `/tasks/:id` | Delete task (for a series: only that occurrence) |
 | PATCH | `/tasks/:id/toggle` | Toggle completion |
 | GET, PATCH, DELETE | `/series/:id` | Read a series with its occurrences / update the shared fields / delete the whole series |

@@ -81,12 +81,13 @@ model Tag {
 // The rule behind a recurring task. Occurrences are generated once, when the series is
 // created, and stored as ordinary tasks (Task.seriesId). Deleting the series deletes them.
 model TaskSeries {
-  id        Int               @id @default(autoincrement())
-  pattern   RecurrencePattern
-  startDate DateTime          @db.Date
-  endDate   DateTime          @db.Date // required, at most 1 year after startDate
-  weekDays  String? // WEEKLY: "MONDAY,WEDNESDAY"
-  monthDay  Int? // MONTHLY: 1-31, or -1 for the last day of the month
+  id          Int               @id @default(autoincrement())
+  pattern     RecurrencePattern
+  description String?
+  startDate   DateTime          @db.Date
+  endDate     DateTime          @db.Date // required, at most 1 year after startDate
+  weekDays    String? // WEEKLY: "MONDAY,WEDNESDAY"
+  monthDay    Int? // MONTHLY: 1-31, or -1 for the last day of the month
 
   userId Int
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -134,9 +134,20 @@ export default function TaskDetailModal({
 
           {task.description && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Description</span>
+              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+                {isSeries ? "This occurrence's note" : "Description"}
+              </span>
               <p className="bg-slate-900/50 p-2 rounded border border-slate-700/50 whitespace-pre-wrap">
                 {task.description}
+              </p>
+            </div>
+          )}
+
+          {isSeries && series?.description && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Series description</span>
+              <p className="bg-slate-900/50 p-2 rounded border border-slate-700/50 whitespace-pre-wrap">
+                {series.description}
               </p>
             </div>
           )}

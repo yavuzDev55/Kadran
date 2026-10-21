@@ -43,6 +43,9 @@ export const findSeriesById = (id) =>
     },
   });
 
+export const updateSeries = (id, data) =>
+  prisma.taskSeries.update({ where: { id }, data });
+
 export const deleteSeries = (id) => prisma.taskSeries.delete({ where: { id } });
 
 export const addTagToSeries = async (seriesId, tagId) => {

@@ -2,7 +2,7 @@
 // Operations on a whole series (all occurrences at once). Single occurrences are handled by
 // the task service.
 
-import { findSeriesById, deleteSeries, addTagToSeries } from './recurring.db.js';
+import { findSeriesById, updateSeries as updateSeriesRecord, deleteSeries, addTagToSeries } from './recurring.db.js';
 import { updateSeriesTasks } from '../task/task.db.js';
 import { findOrCreateTag } from '../tag/tag.db.js';
 import { serializeTask } from '../task/task.service.js';
@@ -10,7 +10,7 @@ import { AuthorizationError, NotFoundError } from '../../shared/utils/customErro
 import { toDateStr } from '../../shared/utils/dateUtils.js';
 
 // Fields shared by every occurrence. Type and time model are fixed once a series exists.
-const SERIES_EDITABLE = ['title', 'description', 'priority', 'color', 'isCompletable', 'isPinned'];
+const SERIES_EDITABLE = ['title', 'priority', 'color', 'isCompletable', 'isPinned'];
 
 const assertSeriesOwnership = async (userId, seriesId) => {
   const series = await findSeriesById(seriesId);
@@ -22,6 +22,7 @@ const assertSeriesOwnership = async (userId, seriesId) => {
 const serializeSeries = (series) => ({
   id: series.id,
   pattern: series.pattern,
+  description: series.description,
   startDate: toDateStr(series.startDate),
   endDate: toDateStr(series.endDate),
   weekDays: series.weekDays ? series.weekDays.split(',') : [],
@@ -40,9 +41,11 @@ export const updateSeriesService = async (userId, seriesId, body) => {
     if (body[key] !== undefined) data[key] = body[key];
   });
   if (typeof data.title === 'string') data.title = data.title.trim();
-  if (data.description === '') data.description = null;
 
-  await updateSeriesTasks(seriesId, data);
+  if (Object.keys(data).length > 0) await updateSeriesTasks(seriesId, data);
+  if (body.description !== undefined) {
+    await updateSeriesRecord(seriesId, { description: body.description === '' ? null : body.description });
+  }
   return serializeSeries(await findSeriesById(seriesId));
 };
 

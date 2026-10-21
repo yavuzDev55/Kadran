@@ -104,11 +104,16 @@ const createSeries = async (userId, body, warnings) => {
   }
 
   const common = buildCommonData(body);
+  const seriesDescription = has(body.description) ? body.description : null;
 
   const tasks = dates.map((date) => {
     const slot = pattern === 'WEEKLY' ? slots[getDayName(date)] : undefined;
     const times = slot ?? { startTime: body.startTime, endTime: body.endTime };
-    return { ...common, ...buildTimeFields(body.timeType, { date, ...times }) };
+    return {
+      ...common,
+      description: null,
+      ...buildTimeFields(body.timeType, { date, ...times }),
+    };
   });
 
   const tagIds = await resolveTagIds(userId, Array.isArray(body.tags) ? body.tags : []);
@@ -117,6 +122,7 @@ const createSeries = async (userId, body, warnings) => {
     userId,
     series: {
       pattern,
+      description: seriesDescription,
       startDate: parseUTCDate(startDate),
       endDate: parseUTCDate(endDate),
       weekDays: pattern === 'WEEKLY' ? weekDays.join(',') : null,
@@ -147,7 +153,7 @@ export const createTask = async (userId, body, warnings = []) => {
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
-const OCCURRENCE_EDITABLE = ['date', 'startTime', 'endTime', 'isPinned'];
+const OCCURRENCE_EDITABLE = ['date', 'startTime', 'endTime', 'isPinned', 'description'];
 const MODEL_FIELDS = ['type', 'timeType', 'date', 'startTime', 'endTime', 'rangeStartDate', 'rangeEndDate'];
 
 const pick = (body, key, fallback) => (key in body ? body[key] : fallback);
@@ -168,6 +174,7 @@ const updateOccurrence = async (existing, body) => {
 
   const data = {};
   const warnings = [];
+  if (body.description !== undefined) data.description = body.description === '' ? null : body.description;
 
   const touchesTime = ['date', 'startTime', 'endTime'].some((key) => key in body);
   if (touchesTime) {

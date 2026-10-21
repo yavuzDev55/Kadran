@@ -1,0 +1,12 @@
+{
+  "name": "kadran",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix kadran-backend run dev",
+    "dev:frontend": "npm --prefix kadran-frontend run dev",
+    "dev": "concurrently -k \"npm:dev:backend\" \"npm:dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

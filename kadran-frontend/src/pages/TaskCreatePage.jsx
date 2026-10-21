@@ -276,6 +276,7 @@ export default function TaskCreatePage() {
           const series = seriesRes.data.data;
           setSeriesInfo({ ...series, taskCount: series.tasks.length, seriesId: t.seriesId });
           setExistingTags(t.tags || []);
+          if (wantsSeriesScope) setForm({ ...loadedForm, description: series.description || "" });
           setMode(wantsSeriesScope ? "edit-series" : "edit-occurrence");
         } else {
           setMode("edit-single");
@@ -439,7 +440,10 @@ export default function TaskCreatePage() {
   };
 
   const submitEditOccurrence = async () => {
-    const payload = { ...buildTimeFields(form) };
+    const payload = {
+      ...buildTimeFields(form),
+      description: form.description,
+    };
     if (form.isPinned !== loaded.isPinned) payload.isPinned = form.isPinned;
     const res = await api.patch(`/tasks/${id}`, payload);
     showWarnings(res.data.warnings);
@@ -519,7 +523,7 @@ export default function TaskCreatePage() {
             🔁 Part of a {PATTERN_LABELS[seriesInfo.pattern].toLowerCase()} series ({seriesInfo.taskCount} tasks,{" "}
             {seriesInfo.startDate} → {seriesInfo.endDate}).{" "}
             {isOccurrence
-              ? "Only the day and time of this occurrence can be changed."
+              ? "The day, time and note of this occurrence can be changed."
               : "Changes apply to every occurrence. Type, time and repeat rule cannot be changed."}
           </span>
           {isOccurrence ? (
@@ -578,7 +582,9 @@ export default function TaskCreatePage() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Description</label>
+                <label className="block text-sm text-slate-400 mb-1">
+                  {isSeriesEdit ? "Series description" : "Description"}
+                </label>
                 <textarea
                   value={form.description}
                   onChange={(e) => set({ description: e.target.value })}
@@ -637,10 +643,22 @@ export default function TaskCreatePage() {
 
           {/* Occurrence summary */}
           {isOccurrence && (
-            <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-sm text-slate-300">
-              <p className="font-semibold text-slate-100">{form.title}</p>
-              <p className="text-xs text-slate-400 mt-1">{TIME_TYPE_LABELS[form.timeType]}</p>
-            </div>
+            <>
+              <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-sm text-slate-300">
+                <p className="font-semibold text-slate-100">{form.title}</p>
+                <p className="text-xs text-slate-400 mt-1">{TIME_TYPE_LABELS[form.timeType]}</p>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">This occurrence&apos;s note</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => set({ description: e.target.value })}
+                  placeholder="Note something specific about this class..."
+                  rows="3"
+                  className={inputClass}
+                />
+              </div>
+            </>
           )}
 
           {/* Single-day / range time fields */}

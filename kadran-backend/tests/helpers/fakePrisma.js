@@ -109,6 +109,11 @@ const prisma = {
         ? { ...row, tasks: db.tasks.filter((t) => t.seriesId === row.id).sort(byDate).map((t) => withRelations(t, include.tasks.include)) }
         : { ...row };
     },
+    update: async ({ where, data }) => {
+      const row = db.series.find((s) => s.id === where.id);
+      Object.assign(row, data);
+      return row;
+    },
     delete: async ({ where }) => {
       db.series = db.series.filter((s) => s.id !== where.id);
       db.tasks = db.tasks.filter((t) => t.seriesId !== where.id); // ON DELETE CASCADE

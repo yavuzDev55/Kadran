@@ -117,7 +117,8 @@ function OccurrenceRow({ task, timeFormat, onToggle, onEdit, onDelete }) {
         <span className="w-4" />
       )}
       <span className={`flex-1 text-sm ${task.isCompleted ? "line-through text-slate-500" : "text-slate-200"}`}>
-        {describeWhen(task, timeFormat)}
+        <span>{describeWhen(task, timeFormat)}</span>
+        {task.description && <span className="block text-xs text-slate-400 mt-1">{task.description}</span>}
       </span>
       <button type="button" onClick={() => onEdit(task)} className="text-xs text-slate-400 hover:text-white px-2 py-1">
         Edit
@@ -450,7 +451,15 @@ export default function TasksPage() {
                               </span>
                             </div>
 
-                            {task.description && <p className="text-sm text-slate-300 mt-1">{task.description}</p>}
+                            {isSeries && task.series?.description && (
+                              <p className="text-sm text-slate-300 mt-1">{task.series.description}</p>
+                            )}
+                            {task.description && (
+                              <p className="text-sm text-slate-300 mt-1">
+                                {isSeries ? "This occurrence: " : ""}
+                                {task.description}
+                              </p>
+                            )}
 
                             <div className="text-xs text-slate-400 mt-2 flex flex-wrap gap-2 items-center">
                               <span className="uppercase font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-900">

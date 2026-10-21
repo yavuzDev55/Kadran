@@ -36,7 +36,4 @@ temp/
 
 # Agents
 kadran-backend/.agents/
-kadran-backend/.claude/
-kadran-backend/.cursor/
 kadran-backend/.devin/
-AGENTS.md

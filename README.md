@@ -80,17 +80,17 @@ Kadran/
 - Node.js 20.19 or newer (required by Vite)
 - A PostgreSQL database (local, or hosted such as Neon)
 
-### 1. Backend
+### Install dependencies
 
 ```bash
-cd kadran-backend
-npm install
-cp .env.example .env        # then edit the values, see below
-npx prisma migrate dev      # creates the schema
-npm run dev                 # http://localhost:3000
+npm install --prefix kadran-backend
+npm install --prefix kadran-frontend
+npm install                 # root development runner
 ```
 
-Environment variables (`kadran-backend/.env`):
+### Configure the backend
+
+Copy `kadran-backend/.env.example` to `kadran-backend/.env`, then configure:
 
 | Variable | Description |
 |----------|-------------|
@@ -103,22 +103,39 @@ Environment variables (`kadran-backend/.env`):
 | `MAX_RANGE_DAYS_HARD` | Reject a `MULTI_DAY` task longer than this many days (default `365`) |
 | `MAX_LIST_LIMIT` | Largest page `GET /tasks` returns (default `500`) |
 
-Other scripts: `npm test` (backend tests, no database needed), `npm start`, `npm run prisma:studio`, `npm run db:reset`.
-
-### 2. Frontend
+Apply database migrations from the backend directory:
 
 ```bash
-cd kadran-frontend
-npm install
-npm run dev                 # http://localhost:5173
+cd kadran-backend
+npx prisma migrate dev
 ```
 
-The API base URL defaults to `http://localhost:3000`. To change it, create
+### Run the application
+
+From the repository root, start both applications:
+
+```bash
+npm run dev
+```
+
+The backend is available at `http://localhost:3000` and the frontend at
+`http://localhost:5173`. To run either app separately, use `npm run dev` in
+its directory.
+
+The frontend API URL defaults to `http://localhost:3000`. To change it, create
 `kadran-frontend/.env` with `VITE_API_URL=https://your-api-host`.
 
-Other scripts: `npm run build`, `npm run preview`, `npm run lint`.
+Useful checks and scripts:
 
-### 3. First run
+- `npm --prefix kadran-backend test` — backend tests; no database required.
+- `npm --prefix kadran-backend start` — start the backend without watch mode.
+- `npm --prefix kadran-backend run prisma:studio` — open Prisma Studio.
+- `npm --prefix kadran-backend run db:reset` — reset the development database.
+- `npm --prefix kadran-frontend run lint` — lint the frontend.
+- `npm --prefix kadran-frontend run build` — build the frontend.
+- `npm --prefix kadran-frontend run preview` — preview the production build.
+
+### First run
 
 Open `http://localhost:5173`, register an account, and create a task with
 **+ New Task**. The dashboard fills in as soon as tasks exist.

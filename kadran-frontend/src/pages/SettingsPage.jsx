@@ -30,6 +30,8 @@ export default function SettingsPage() {
   const [timeFormat,    setTimeFormat]    = useState(user?.timeFormat     || "H24");
   const [defaultView,   setDefaultView]   = useState(user?.defaultView    || "WEEK");
   const [hideCompleted, setHideCompleted] = useState(user?.hideCompleted  || false);
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [headline, setHeadline] = useState(user?.headline || "");
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword,     setNewPassword]     = useState("");
@@ -44,6 +46,8 @@ export default function SettingsPage() {
     setSavingProfile(true);
     try {
       const res = await api.patch("/auth/me", {
+        displayName,
+        headline,
         timeZone,
         weekStartsOn,
         dayStartHour: Number(dayStartHour),
@@ -117,6 +121,36 @@ export default function SettingsPage() {
             <p className="text-xs text-slate-400">Calendar display and regional settings</p>
           </div>
           <form onSubmit={handleSaveProfile} className="p-4 flex flex-col gap-4">
+
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200 mb-3">Personal profile</h3>
+              <div className="flex flex-col gap-4">
+                <label className="block text-sm text-slate-400">
+                  Display name
+                  <input
+                    type="text"
+                    value={displayName}
+                    maxLength={50}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="How should we address you?"
+                    className="mt-1 w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">Up to 50 characters.</span>
+                </label>
+                <label className="block text-sm text-slate-400">
+                  Headline
+                  <input
+                    type="text"
+                    value={headline}
+                    maxLength={80}
+                    onChange={(e) => setHeadline(e.target.value)}
+                    placeholder="e.g. Computer Science, Year 3"
+                    className="mt-1 w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">Optional, up to 80 characters.</span>
+                </label>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm text-slate-400 mb-1">Email Address</label>
@@ -195,7 +229,7 @@ export default function SettingsPage() {
             <div className="pt-1">
               <button type="submit" disabled={savingProfile}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded transition disabled:opacity-50">
-                {savingProfile ? "Saving..." : "Save Preferences"}
+                {savingProfile ? "Saving..." : "Save Profile & Preferences"}
               </button>
             </div>
           </form>

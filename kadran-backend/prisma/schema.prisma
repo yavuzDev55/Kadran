@@ -22,11 +22,11 @@ enum TaskType {
 
 // The order mirrors the database (values were renamed in place by the v4 migration).
 enum TimeType {
-  TIMED      // date + startTime + endTime
-  DEADLINE   // date + endTime (the due time, defaults to 23:59)
-  MULTI_DAY  // rangeStartDate + rangeEndDate (whole days; same day twice = one-day task)
+  TIMED // date + startTime + endTime
+  DEADLINE // date + endTime (the due time, defaults to 23:59)
+  MULTI_DAY // rangeStartDate + rangeEndDate (whole days; same day twice = one-day task)
   OPEN_ENDED // date + startTime, no end
-  ANY_TIME   // no date, no time — never placed on the calendar
+  ANY_TIME // no date, no time — never placed on the calendar
 }
 
 enum Priority {
@@ -42,10 +42,12 @@ enum RecurrencePattern {
 }
 
 model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
-  timeZone String @default("Europe/Istanbul")
+  id          Int     @id @default(autoincrement())
+  email       String  @unique
+  password    String
+  displayName String?
+  headline    String?
+  timeZone    String  @default("Europe/Istanbul")
 
   weekStartsOn  String  @default("MONDAY") // MONDAY | SUNDAY
   dayStartHour  Int     @default(8) // calendar grid start (0-23)

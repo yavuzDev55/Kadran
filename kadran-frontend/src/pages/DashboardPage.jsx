@@ -173,7 +173,9 @@ export default function DashboardPage() {
 
   return (
     <div className="p-2 md:p-4 pb-12">
-      <h1 className="text-xl font-bold text-slate-100 mb-4">Dashboard</h1>
+      <h1 className="text-xl font-bold text-slate-100 mb-4">
+        {user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
+      </h1>
 
       <div className="relative flex flex-col gap-4">
         {loading && (

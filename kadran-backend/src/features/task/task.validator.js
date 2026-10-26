@@ -14,6 +14,8 @@ import { PRIORITIES, TASK_RULES, TASK_TYPES, TIME_TYPES } from './task.rules.js'
 import { has, validateTimeFields } from './task.time.js';
 
 const TAG_REGEX = /^[\p{L}0-9_\- ]{1,50}$/u;
+const TASK_SORT_FIELDS = ['date', 'priority', 'title', 'created', 'type'];
+const SORT_DIRECTIONS = ['asc', 'desc'];
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -244,6 +246,8 @@ export const listTasks = (req, res, next) => {
   oneOf('type', TASK_TYPES);
   oneOf('priority', PRIORITIES);
   oneOf('timeType', TIME_TYPES);
+  oneOf('sort', TASK_SORT_FIELDS);
+  oneOf('order', SORT_DIRECTIONS);
 
   ['from', 'to', 'today'].forEach((key) => {
     if (q[key] === undefined || q[key] === '') return;
@@ -290,6 +294,8 @@ export const listTasks = (req, res, next) => {
   };
   filters.limit = int('limit', DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT);
   filters.offset = int('offset', 0, 0, 1_000_000);
+  filters.sort ??= 'date';
+  filters.order ??= 'asc';
 
   if (Object.keys(details).length > 0) {
     return next(new ValidationError('Validation failed', details));

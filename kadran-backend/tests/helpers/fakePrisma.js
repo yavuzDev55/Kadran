@@ -29,6 +29,40 @@ const byDate = (a, b) => {
   return da - dbb || a.id - b.id;
 };
 
+const ENUM_ORDER = {
+  priority: ['LOW', 'MEDIUM', 'HIGH'],
+  type: ['COURSE', 'EXAM', 'HOMEWORK', 'CUSTOM'],
+};
+
+const compareOrderValue = (field, left, right) => {
+  const enumValues = ENUM_ORDER[field];
+  if (enumValues) return enumValues.indexOf(left) - enumValues.indexOf(right);
+  if (left instanceof Date && right instanceof Date) return left.getTime() - right.getTime();
+  return String(left).localeCompare(String(right));
+};
+
+const orderRows = (rows, orderBy) => {
+  if (!orderBy) return rows.sort(byDate);
+
+  return rows.sort((a, b) => {
+    for (const descriptor of orderBy) {
+      const [field, config] = Object.entries(descriptor)[0];
+      const direction = typeof config === 'string' ? config : config.sort;
+      const nulls = typeof config === 'object' ? config.nulls : undefined;
+      const left = a[field];
+      const right = b[field];
+      if (left == null || right == null) {
+        if (left == null && right == null) continue;
+        const nullsFirst = nulls ? nulls === 'first' : direction === 'desc';
+        return (left == null) === nullsFirst ? -1 : 1;
+      }
+      const result = compareOrderValue(field, left, right);
+      if (result !== 0) return result * (direction === 'desc' ? -1 : 1);
+    }
+    return 0;
+  });
+};
+
 const withRelations = (task, include) => {
   if (!task) return task;
   const copy = { ...task };
@@ -41,6 +75,15 @@ const withRelations = (task, include) => {
   return copy;
 };
 
+const selectFields = (row, select) => {
+  if (!row || !select) return row;
+  return Object.fromEntries(
+    Object.keys(select)
+      .filter((key) => select[key])
+      .map((key) => [key, row[key]])
+  );
+};
+
 const taskDefaults = {
   description: null, date: null, startTime: null, endTime: null, rangeStartDate: null,
   rangeEndDate: null, priority: 'MEDIUM', isCompletable: true, color: null, isPinned: false,
@@ -48,21 +91,59 @@ const taskDefaults = {
 };
 
 const prisma = {
+  user: {
+    findUnique: async ({ where, select }) => {
+      const user = db.users.find((entry) =>
+        where.id !== undefined ? entry.id === where.id : entry.email === where.email
+      );
+      return selectFields(user, select);
+    },
+    create: async ({ data, select }) => {
+      const user = {
+        displayName: null,
+        headline: null,
+        timeZone: 'Europe/Istanbul',
+        weekStartsOn: 'MONDAY',
+        dayStartHour: 8,
+        dayEndHour: 22,
+        timeFormat: 'H24',
+        defaultView: 'WEEK',
+        hideCompleted: false,
+        ...data,
+        id: nextId('user'),
+        createdAt: new Date(),
+      };
+      db.users.push(user);
+      return selectFields(user, select);
+    },
+    update: async ({ where, data, select }) => {
+      const user = db.users.find((entry) => entry.id === where.id);
+      if (!user) throw new Error('User not found');
+      Object.assign(user, data);
+      return selectFields(user, select);
+    },
+    delete: async ({ where }) => {
+      const index = db.users.findIndex((entry) => entry.id === where.id);
+      if (index < 0) throw new Error('User not found');
+      return db.users.splice(index, 1)[0];
+    },
+  },
   task: {
     create: async ({ data, include }) => {
-      const row = { ...taskDefaults, ...data, id: nextId('task') };
+      const row = { ...taskDefaults, ...data, createdAt: data.createdAt ?? new Date(), id: nextId('task') };
       db.tasks.push(row);
       return withRelations(row, include);
     },
     createMany: async ({ data }) => {
-      data.forEach((d) => db.tasks.push({ ...taskDefaults, ...d, id: nextId('task') }));
+      data.forEach((d) => db.tasks.push({ ...taskDefaults, ...d, createdAt: d.createdAt ?? new Date(), id: nextId('task') }));
       return { count: data.length };
     },
     findUnique: async ({ where, include }) =>
       withRelations(db.tasks.find((t) => t.id === where.id), include),
-    findMany: async ({ where, include } = {}) => {
+    findMany: async ({ where, include, orderBy } = {}) => {
       db.lastTaskWhere = where;
-      return db.tasks.filter((t) => matches(t, where)).sort(byDate).map((t) => withRelations(t, include));
+      return orderRows(db.tasks.filter((t) => matches(t, where)), orderBy)
+        .map((t) => withRelations(t, include));
     },
     count: async ({ where } = {}) => db.tasks.filter((t) => matches(t, where)).length,
     update: async ({ where, data, include }) => {

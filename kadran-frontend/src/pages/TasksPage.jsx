@@ -18,6 +18,14 @@ import { TASK_TYPES } from "../utils/taskRules";
 
 const PAGE_SIZE = 50;
 const FILTER_DEBOUNCE_MS = 250;
+const SORT_OPTIONS = [
+  { value: "date", label: "Date" },
+  { value: "priority", label: "Priority" },
+  { value: "title", label: "Title" },
+  { value: "created", label: "Date created" },
+  { value: "type", label: "Task type" },
+];
+const DEFAULT_TASK_FILTERS = { ...DEFAULT_FILTERS, sort: "date", order: "asc" };
 
 const PRIORITY_STYLES = {
   HIGH: "bg-red-900 text-red-200",
@@ -38,11 +46,15 @@ const describeWhen = (task, timeFormat) => {
 
 /** Filters requested through the URL, e.g. /tasks?priority=HIGH (used by the dashboard links). */
 const filtersFromSearch = (searchParams) => ({
-  ...DEFAULT_FILTERS,
+  ...DEFAULT_TASK_FILTERS,
   priority: searchParams.get("priority") || "",
   type: searchParams.get("type") || "",
   timeType: searchParams.get("timeType") || "",
   pinnedOnly: searchParams.get("isPinned") === "true",
+  sort: SORT_OPTIONS.some((option) => option.value === searchParams.get("sort"))
+    ? searchParams.get("sort")
+    : "date",
+  order: searchParams.get("order") === "desc" ? "desc" : "asc",
 });
 
 const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).filter(([k]) => k !== String(key)));
@@ -136,7 +148,7 @@ function OccurrenceRow({ task, timeFormat, onToggle, onEdit, onDelete }) {
 
 export default function TasksPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const timeZone = user?.timeZone || "Europe/Istanbul";
   const timeFormat = user?.timeFormat || "H24";
@@ -172,12 +184,44 @@ export default function TasksPage() {
       if (filters.pinnedOnly) params.isPinned = true;
       if (filters.from) params.from = filters.from;
       if (filters.to) params.to = filters.to;
+      params.sort = filters.sort;
+      params.order = filters.order;
       // The backend shows completed tasks unless it is told "false" explicitly
       params.showCompleted = filters.showCompleted;
       return params;
     },
     [filters, timeZone]
   );
+
+  const updateSort = (sort) => {
+    setFilters((current) => ({ ...current, sort }));
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("sort", sort);
+      return next;
+    }, { replace: true });
+  };
+
+  const updateOrder = () => {
+    const order = filters.order === "asc" ? "desc" : "asc";
+    setFilters((current) => ({ ...current, order }));
+    setSearchParams((search) => {
+      const next = new URLSearchParams(search);
+      next.set("order", order);
+      return next;
+    }, { replace: true });
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_TASK_FILTERS);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      ["priority", "type", "timeType", "isPinned", "sort", "order"].forEach((key) => {
+        next.delete(key);
+      });
+      return next;
+    }, { replace: true });
+  };
 
   // Reload from the first page whenever a filter changes (debounced, so typing is cheap)
   useEffect(() => {
@@ -359,8 +403,7 @@ export default function TasksPage() {
 
   const editOccurrence = (task) => navigate(`/tasks/edit/${task.id}`);
 
-  // Pinned first within what is loaded; the server order (by date) is kept otherwise
-  const rows = [...tasks].sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
+  const rows = tasks;
 
   return (
     <div className="p-2 md:p-4 mb-20">
@@ -378,7 +421,7 @@ export default function TasksPage() {
         <FilterSidebar
           filters={filters}
           onChange={setFilters}
-          onReset={() => setFilters(DEFAULT_FILTERS)}
+          onReset={resetFilters}
           sections={{ search: true, dates: true }}
         />
 
@@ -386,10 +429,38 @@ export default function TasksPage() {
           {error && <div className="p-3 mb-4 bg-red-900/50 border border-red-500 text-red-200 rounded">{error}</div>}
 
           <div className="bg-slate-800 p-4 md:p-6 rounded-lg border border-slate-700 shadow-xl">
-            <h2 className="text-xl mb-4 border-b border-slate-600 pb-2 font-semibold text-slate-100">
-              My Tasks
-              {!loading && <span className="ml-2 text-sm font-normal text-slate-400">({total})</span>}
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-600 pb-3">
+              <h2 className="text-xl font-semibold text-slate-100">
+                My Tasks
+                {!loading && <span className="ml-2 text-sm font-normal text-slate-400">({total})</span>}
+              </h2>
+              <div className="flex items-center gap-2 text-sm text-slate-300">
+                <label htmlFor="task-sort" className="text-slate-400">
+                  Sort by
+                </label>
+                <select
+                  id="task-sort"
+                  value={filters.sort}
+                  onChange={(event) => updateSort(event.target.value)}
+                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-100"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option value={option.value} key={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={updateOrder}
+                  aria-label={`Sort ${filters.order === "asc" ? "descending" : "ascending"}`}
+                  title={`Currently ${filters.order === "asc" ? "ascending" : "descending"}`}
+                  className="rounded border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-slate-200 hover:bg-slate-700"
+                >
+                  {filters.order === "asc" ? "↑" : "↓"}
+                </button>
+              </div>
+            </div>
 
             {loading ? (
               <p className="text-slate-400 text-center py-6">Loading tasks...</p>

@@ -10,7 +10,11 @@ import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom"
 import api from "../services/api";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
-import TagCombobox from "../components/TagCombobox";
+import TaskAppearanceFields from "../components/task-form/TaskAppearanceFields";
+import TaskDetailsFields from "../components/task-form/TaskDetailsFields";
+import TaskRecurrenceFields from "../components/task-form/TaskRecurrenceFields";
+import TaskTimeFields from "../components/task-form/TaskTimeFields";
+import TaskTypeSelector from "../components/task-form/TaskTypeSelector";
 import { addYears, getTodayInTimezone, sliceDate, WEEKDAYS } from "../utils/dateUtils";
 import {
   MAX_SERIES_YEARS,
@@ -21,164 +25,11 @@ import {
   canRecur,
 } from "../utils/taskRules";
 
-const DAY_LABELS = {
-  MONDAY: "Monday",
-  TUESDAY: "Tuesday",
-  WEDNESDAY: "Wednesday",
-  THURSDAY: "Thursday",
-  FRIDAY: "Friday",
-  SATURDAY: "Saturday",
-  SUNDAY: "Sunday",
-};
-
-const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
-
-const PALETTE = [
-  "#3b82f6", "#ef4444", "#22c55e", "#94a3b8",
-  "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6",
-  "#f97316", "#64748b", "#06b6d4", "#a3e635",
-];
-
 const DEFAULT_DEADLINE_TIME = "23:59";
+const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
 
 const inputClass =
   "w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60";
-const smallInputClass =
-  "w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm focus:outline-none focus:border-blue-500";
-
-function ColorPicker({ value, onChange, typeDefault }) {
-  return (
-    <div className="flex flex-wrap gap-2 items-center">
-      <button
-        type="button"
-        onClick={() => onChange(null)}
-        title="Use type default"
-        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs transition ${
-          value === null ? "border-white" : "border-slate-600 hover:border-slate-400"
-        }`}
-        style={{ backgroundColor: typeDefault }}
-      >
-        {value === null && <span className="text-white font-bold">✓</span>}
-      </button>
-      {PALETTE.map((hex) => (
-        <button
-          key={hex}
-          type="button"
-          onClick={() => onChange(hex)}
-          title={hex}
-          className={`w-7 h-7 rounded-full border-2 transition ${
-            value === hex ? "border-white scale-110" : "border-transparent hover:border-slate-400"
-          }`}
-          style={{ backgroundColor: hex }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function Field({ label, children, hint }) {
-  return (
-    <div>
-      <label className="block text-xs text-slate-400 mb-1">{label}</label>
-      {children}
-      {hint && <p className="text-[11px] text-slate-500 mt-1">{hint}</p>}
-    </div>
-  );
-}
-
-/** Day + clock inputs for one time type (a day range for multi-day, nothing for any-time). */
-function TimeFields({ timeType, form, set, showDate = true }) {
-  if (timeType === "MULTI_DAY") {
-    const sameDay = form.rangeStartDate && form.rangeStartDate === form.rangeEndDate;
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Start day *">
-            <input
-              type="date"
-              value={form.rangeStartDate}
-              onChange={(e) => set({ rangeStartDate: e.target.value })}
-              className={smallInputClass}
-              required
-            />
-          </Field>
-          <Field label="End day *">
-            <input
-              type="date"
-              value={form.rangeEndDate}
-              min={form.rangeStartDate || undefined}
-              onChange={(e) => set({ rangeEndDate: e.target.value })}
-              className={smallInputClass}
-              required
-            />
-          </Field>
-        </div>
-        <p className="text-[11px] text-slate-500">
-          {sameDay
-            ? "Same start and end day: a one-day task, shown as an all-day item on the calendar."
-            : "Whole days only. Shown as a bar across the days on the calendar."}
-        </p>
-      </div>
-    );
-  }
-
-  if (timeType === "ANY_TIME") {
-    return (
-      <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-xs text-slate-400">
-        No date or time. This task is listed under "Any time" on the dashboard and never appears on the calendar.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {showDate && (
-        <Field label="Date *">
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => set({ date: e.target.value })}
-            className={smallInputClass}
-            required
-          />
-        </Field>
-      )}
-      {(timeType === "TIMED" || timeType === "OPEN_ENDED") && (
-        <Field label="Start time *">
-          <input
-            type="time"
-            value={form.startTime}
-            onChange={(e) => set({ startTime: e.target.value })}
-            className={smallInputClass}
-            required
-          />
-        </Field>
-      )}
-      {timeType === "TIMED" && (
-        <Field label="End time *">
-          <input
-            type="time"
-            value={form.endTime}
-            onChange={(e) => set({ endTime: e.target.value })}
-            className={smallInputClass}
-            required
-          />
-        </Field>
-      )}
-      {timeType === "DEADLINE" && (
-        <Field label="Due time" hint="Defaults to 23:59.">
-          <input
-            type="time"
-            value={form.endTime}
-            onChange={(e) => set({ endTime: e.target.value })}
-            className={smallInputClass}
-          />
-        </Field>
-      )}
-    </div>
-  );
-}
-
 const emptyForm = (type, today) => {
   const rule = TASK_RULES[type];
   return {
@@ -538,25 +389,11 @@ export default function TaskCreatePage() {
         </div>
       )}
 
-      {/* Task type */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
-        {TASK_TYPES.map((type) => (
-          <button
-            key={type.id}
-            type="button"
-            disabled={isOccurrence || isSeriesEdit}
-            onClick={() => handleTypeChange(type.id)}
-            className={`p-3 rounded-lg border text-left transition disabled:cursor-not-allowed ${
-              form.type === type.id
-                ? "bg-blue-600 border-blue-500 text-white shadow-lg"
-                : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800"
-            }`}
-          >
-            <div className="font-bold text-sm">{type.label}</div>
-            <div className="text-xs opacity-80 mt-0.5">{type.hint}</div>
-          </button>
-        ))}
-      </div>
+      <TaskTypeSelector
+        value={form.type}
+        disabled={isOccurrence || isSeriesEdit}
+        onChange={handleTypeChange}
+      />
 
       <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-xl">
         {error && (
@@ -568,77 +405,13 @@ export default function TaskCreatePage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* Shared fields (not editable per occurrence) */}
           {!isOccurrence && (
-            <>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Task Title *</label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={(e) => set({ title: e.target.value })}
-                  placeholder="e.g. Algorithms Lecture"
-                  className={inputClass}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">
-                  {isSeriesEdit ? "Series description" : "Description"}
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => set({ description: e.target.value })}
-                  placeholder="Optional notes..."
-                  rows="2"
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Tags</label>
-                <TagCombobox
-                  selectedTags={form.tags}
-                  onAdd={(tag) => set({ tags: [...form.tags, tag] })}
-                  onRemove={(tag) => set({ tags: form.tags.filter((t) => t !== tag) })}
-                  placeholder="Search or add a tag..."
-                />
-                {isSeriesEdit && (
-                  <p className="text-[11px] text-slate-500 mt-1">Tags can be added to a series, not removed.</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">Priority</label>
-                  <select
-                    value={form.priority}
-                    onChange={(e) => set({ priority: e.target.value })}
-                    className={inputClass}
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                </div>
-
-                {!isSeriesEdit && allowedTimeTypes.length > 1 && (
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Time Type</label>
-                    <select
-                      value={form.timeType}
-                      onChange={(e) => handleTimeTypeChange(e.target.value)}
-                      className={inputClass}
-                    >
-                      {allowedTimeTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {TIME_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </>
+            <TaskDetailsFields
+              form={form}
+              set={set}
+              isSeriesEdit={isSeriesEdit}
+              allowedTimeTypes={allowedTimeTypes}
+              onTimeTypeChange={handleTimeTypeChange}
+            />
           )}
 
           {/* Occurrence summary */}
@@ -665,191 +438,31 @@ export default function TaskCreatePage() {
           {!isSeriesEdit && !form.recurring && (
             <div className="flex flex-col gap-2">
               <h3 className="text-sm font-semibold text-slate-300">When</h3>
-              <TimeFields timeType={form.timeType} form={form} set={set} />
+              <TaskTimeFields timeType={form.timeType} form={form} set={set} />
             </div>
           )}
 
           {/* Recurrence (creation only) */}
           {showRecurrence && (
-            <div className="border-t border-slate-700 pt-3 mt-1 flex flex-col gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.recurring}
-                  onChange={(e) => set({ recurring: e.target.checked })}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <span className="text-sm font-semibold text-slate-200">Repeat this task</span>
-              </label>
-
-              {form.recurring && (
-                <div className="flex flex-col gap-4 p-3 bg-slate-900/50 rounded border border-slate-700/50">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Field label="Repeats">
-                      <select
-                        value={form.pattern}
-                        onChange={(e) => set({ pattern: e.target.value })}
-                        className={smallInputClass}
-                      >
-                        {Object.entries(PATTERN_LABELS).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="First day *">
-                      <input
-                        type="date"
-                        value={form.recStart}
-                        onChange={(e) => set({ recStart: e.target.value })}
-                        className={smallInputClass}
-                        required
-                      />
-                    </Field>
-                    <Field label="Last day *" hint="At most 1 year after the first day.">
-                      <input
-                        type="date"
-                        value={form.recEnd}
-                        min={form.recStart || undefined}
-                        max={recurrenceMax}
-                        onChange={(e) => set({ recEnd: e.target.value })}
-                        className={smallInputClass}
-                        required
-                      />
-                    </Field>
-                  </div>
-
-                  {form.pattern === "MONTHLY" && (
-                    <Field label="Day of the month" hint="Days missing from a short month fall back to its last day.">
-                      <select
-                        value={form.monthDay}
-                        onChange={(e) => set({ monthDay: Number(e.target.value) })}
-                        className={smallInputClass}
-                      >
-                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                          <option key={day} value={day}>
-                            {day}
-                          </option>
-                        ))}
-                        <option value={-1}>Last day of the month</option>
-                      </select>
-                    </Field>
-                  )}
-
-                  {/* Default clock times: shared by daily/monthly, starting values for weekly days */}
-                  {form.timeType !== "DEADLINE" && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label={form.pattern === "WEEKLY" ? "Default start time *" : "Start time *"}>
-                        <input
-                          type="time"
-                          value={form.startTime}
-                          onChange={(e) => set({ startTime: e.target.value })}
-                          className={smallInputClass}
-                          required={form.pattern !== "WEEKLY"}
-                        />
-                      </Field>
-                      {form.timeType === "TIMED" && (
-                        <Field label={form.pattern === "WEEKLY" ? "Default end time *" : "End time *"}>
-                          <input
-                            type="time"
-                            value={form.endTime}
-                            onChange={(e) => set({ endTime: e.target.value })}
-                            className={smallInputClass}
-                            required={form.pattern !== "WEEKLY"}
-                          />
-                        </Field>
-                      )}
-                    </div>
-                  )}
-
-                  {form.pattern === "WEEKLY" && (
-                    <div className="flex flex-col gap-2">
-                      <span className="text-xs text-slate-400">Days (each day can have its own time)</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {WEEKDAYS.map((day) => (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleWeekDay(day)}
-                            className={`px-2.5 py-1 text-xs rounded border transition ${
-                              form.weekDays.includes(day)
-                                ? "bg-blue-600 border-blue-500 text-white"
-                                : "bg-slate-900 border-slate-600 text-slate-300 hover:bg-slate-700"
-                            }`}
-                          >
-                            {DAY_LABELS[day].slice(0, 3)}
-                          </button>
-                        ))}
-                      </div>
-                      {form.weekDays.map((day) => (
-                        <div key={day} className="grid grid-cols-[90px_1fr_1fr] items-center gap-2">
-                          <span className="text-xs text-slate-300">{DAY_LABELS[day]}</span>
-                          <input
-                            type="time"
-                            value={form.slots[day]?.startTime || ""}
-                            onChange={(e) => setSlot(day, { startTime: e.target.value })}
-                            className={smallInputClass}
-                            required
-                          />
-                          {form.timeType === "TIMED" ? (
-                            <input
-                              type="time"
-                              value={form.slots[day]?.endTime || ""}
-                              onChange={(e) => setSlot(day, { endTime: e.target.value })}
-                              className={smallInputClass}
-                              required
-                            />
-                          ) : (
-                            <span />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <TaskRecurrenceFields
+              form={form}
+              set={set}
+              recurrenceMax={recurrenceMax}
+              onToggleWeekDay={toggleWeekDay}
+              onSetSlot={setSlot}
+            />
           )}
 
           {/* Appearance and flags (not for a single occurrence) */}
-          {!isOccurrence && (
-            <>
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">Task Color</label>
-                <ColorPicker value={form.color} onChange={(color) => set({ color })} typeDefault={TYPE_COLORS[form.type]} />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="isCompletable"
-                  checked={form.isCompletable}
-                  disabled={!rule.completable.editable}
-                  onChange={(e) => set({ isCompletable: e.target.checked })}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <label htmlFor="isCompletable" className="text-sm text-slate-300 cursor-pointer">
-                  This task can be marked as complete
-                  {!rule.completable.editable && <span className="text-slate-500"> (always on for {form.type.toLowerCase()})</span>}
-                </label>
-              </div>
-            </>
-          )}
-
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isPinned"
-              checked={form.isPinned}
-              onChange={(e) => set({ isPinned: e.target.checked })}
-              className="w-4 h-4 accent-blue-600"
-            />
-            <label htmlFor="isPinned" className="text-sm text-slate-300 cursor-pointer">
-              📌 Pin {isOccurrence || isSeriesEdit || form.recurring ? "the whole series" : "this task"} (listed in the
-              dashboard's Pinned panel)
-            </label>
-          </div>
+          <TaskAppearanceFields
+            form={form}
+            set={set}
+            typeDefault={TYPE_COLORS[form.type]}
+            type={form.type}
+            completableEditable={rule.completable.editable}
+            isOccurrence={isOccurrence}
+            isSeriesEdit={isSeriesEdit}
+          />
 
           <button
             type="submit"

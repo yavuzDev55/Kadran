@@ -36,6 +36,8 @@ const generateToken = (user) =>
 const serializeUser = (user) => ({
   id: user.id,
   email: user.email,
+  displayName: user.displayName ?? null,
+  headline: user.headline ?? null,
   timeZone: user.timeZone,
   weekStartsOn: user.weekStartsOn,
   dayStartHour: user.dayStartHour,
@@ -84,6 +86,23 @@ export const getMeService = async (userId) => {
 export const updateSettingsService = async (userId, body) => {
   const details = {};
   const data = {};
+
+  const profileField = (key, maxLength) => {
+    if (body[key] === undefined) return;
+    if (body[key] !== null && typeof body[key] !== 'string') {
+      details[key] = `${key} must be a string`;
+      return;
+    }
+    const value = typeof body[key] === 'string' ? body[key].trim() : '';
+    if (value.length > maxLength) {
+      details[key] = `${key} must be at most ${maxLength} characters`;
+      return;
+    }
+    data[key] = value || null;
+  };
+
+  profileField('displayName', 50);
+  profileField('headline', 80);
 
   if (body.timeZone !== undefined) {
     if (!isValidTimezone(body.timeZone)) {

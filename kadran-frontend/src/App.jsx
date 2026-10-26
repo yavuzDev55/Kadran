@@ -10,8 +10,9 @@ import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import { Toaster } from 'react-hot-toast';
+import UiPage from "./pages/UiPage";
 
-const router = createBrowserRouter([
+const appRoutes = [
   {
     path: "/",
     element: <Layout />,
@@ -74,7 +75,16 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+if (import.meta.env.DEV) {
+  appRoutes.push({
+    path: "/_ui",
+    element: <UiPage />,
+  });
+}
+
+const router = createBrowserRouter(appRoutes);
 
 export default function App() {
   return (
@@ -84,8 +94,9 @@ export default function App() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: '#1e293b', 
-            color: '#fff',
+            background: 'rgb(var(--color-surface))',
+            color: 'rgb(var(--color-ink))',
+            border: '1px solid rgb(var(--color-border) / 0.2)',
           }
         }} 
       />

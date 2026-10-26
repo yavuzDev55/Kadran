@@ -154,6 +154,18 @@ Open `http://localhost:5173`, register an account, and create a task with
 | `/calendar` | Week / month calendar | yes |
 | `/settings` | User preferences | yes |
 | `/login`, `/register` | Authentication | no |
+| `/_ui` | Development-only design system catalog | no |
+
+The design system is defined with CSS variables in
+`kadran-frontend/src/index.css` and exposed as Tailwind colors and fonts in
+`kadran-frontend/tailwind.config.js`. Shared UI primitives live in
+`kadran-frontend/src/components/ui/`. The `/_ui` catalog is available only
+while running the Vite development server and can preview both themes.
+
+The optional user profile fields are added by the
+`20261027004500_user_profile` migration. Apply migrations only against the
+intended development database before running the updated backend; do not reset
+a database containing user data.
 
 ---
 
@@ -209,6 +221,9 @@ task is created (`kadran-backend/src/features/recurring/recurring.service.js`).
 - `isPinned` — pinned tasks are listed in the dashboard's Pinned panel regardless of date. A pinned
   series is listed once, as its next unfinished occurrence. Set it in the task form, or toggle it with
   the 📌 button on the dashboard, in the list view and in the calendar's task detail window
+- `displayName` and `headline` — optional profile fields editable in Settings (maximum 50 and 80
+  characters). Existing users can leave both blank; the display name is used in the navigation and
+  dashboard greeting.
 
 ---
 
@@ -222,7 +237,7 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 | Method | Route | Purpose |
 |--------|-------|---------|
 | POST | `/auth/register`, `/auth/login` | Create account / sign in |
-| GET, PATCH, DELETE | `/auth/me` | Read / update preferences / delete account |
+| GET, PATCH, DELETE | `/auth/me` | Read / update profile and preferences / delete account |
 | PATCH | `/auth/me/password` | Change password |
 | GET | `/tasks` | List tasks |
 | GET | `/tasks/:id` | Single task |
@@ -241,7 +256,9 @@ Responses use the envelope `{ success, data, meta? }`. Errors return
 `GET /tasks` query parameters: `q` (case-insensitive title search), `type`, `priority`, `timeType`,
 `isPinned`, `tags` (comma-separated), `from`, `to`, `showCompleted` (shown unless set to `false`),
 `collapseSeries` (one row per series, with `seriesInfo`), `today` (picks the occurrence that stands for
-a series), `limit` (default 50, at most `MAX_LIST_LIMIT`), `offset`.
+a series), `sort` (`date`, `priority`, `title`, `created`, or `type`; defaults to `date`),
+`order` (`asc` or `desc`; defaults to `asc`), `limit` (default 50, at most `MAX_LIST_LIMIT`),
+`offset`. Sorting is applied server-side before pagination; equal values are ordered by task ID.
 
 > `from` / `to` return single-day tasks whose `date` is inside the window and `MULTI_DAY` tasks whose
 > range overlaps it. `ANY_TIME` tasks have no date and are never returned by a `from` / `to` query.

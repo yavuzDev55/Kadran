@@ -210,3 +210,85 @@ test('list: collapseSeries shows one row per series with the next unfinished occ
   assert.deepEqual(page.tasks.map((t) => t.title), ['HW']);
   assert.equal(page.hasMore, true);
 });
+
+test('list: server sorting applies to paginated tasks with a stable id tie-breaker', async () => {
+  const low = (await taskService.createTask(USER, {
+    title: 'Gamma',
+    type: 'COURSE',
+    timeType: 'TIMED',
+    date: '2026-12-01',
+    startTime: '09:00',
+    endTime: '10:00',
+    priority: 'LOW',
+  })).task;
+  const high = (await taskService.createTask(USER, {
+    title: 'Beta',
+    type: 'EXAM',
+    timeType: 'TIMED',
+    date: '2026-12-02',
+    startTime: '09:00',
+    endTime: '10:00',
+    priority: 'HIGH',
+  })).task;
+  const medium = (await taskService.createTask(USER, {
+    title: 'Alpha',
+    type: 'HOMEWORK',
+    timeType: 'DEADLINE',
+    date: '2026-12-03',
+    endTime: '10:00',
+    priority: 'MEDIUM',
+  })).task;
+  const highLater = (await taskService.createTask(USER, {
+    title: 'Zulu',
+    type: 'CUSTOM',
+    timeType: 'TIMED',
+    date: '2026-12-04',
+    startTime: '09:00',
+    endTime: '10:00',
+    priority: 'HIGH',
+  })).task;
+  dbState.tasks.find((task) => task.id === low.id).createdAt = new Date('2026-01-03T00:00:00Z');
+  dbState.tasks.find((task) => task.id === high.id).createdAt = new Date('2026-01-01T00:00:00Z');
+  dbState.tasks.find((task) => task.id === medium.id).createdAt = new Date('2026-01-02T00:00:00Z');
+  dbState.tasks.find((task) => task.id === highLater.id).createdAt = new Date('2026-01-04T00:00:00Z');
+
+  const options = { limit: 50, offset: 0, today: '2026-12-01', showCompleted: true };
+  const byPriority = await taskService.listTasks(USER, { ...options, sort: 'priority', order: 'desc' });
+  assert.deepEqual(byPriority.tasks.map((task) => task.id), [high.id, highLater.id, medium.id, low.id]);
+
+  const byTitle = await taskService.listTasks(USER, { ...options, sort: 'title', order: 'asc' });
+  assert.deepEqual(byTitle.tasks.map((task) => task.id), [medium.id, high.id, low.id, highLater.id]);
+
+  const byType = await taskService.listTasks(USER, { ...options, sort: 'type', order: 'asc' });
+  assert.deepEqual(byType.tasks.map((task) => task.id), [low.id, high.id, medium.id, highLater.id]);
+
+  const byCreated = await taskService.listTasks(USER, { ...options, sort: 'created', order: 'asc' });
+  assert.deepEqual(byCreated.tasks.map((task) => task.id), [high.id, medium.id, low.id, highLater.id]);
+
+  const byDateDescending = await taskService.listTasks(USER, { ...options, sort: 'date', order: 'desc' });
+  assert.deepEqual(byDateDescending.tasks.map((task) => task.id), [highLater.id, medium.id, high.id, low.id]);
+});
+
+test('list: collapsed series use the requested sort order too', async () => {
+  const { task: lowSeriesTask } = await taskService.createTask(USER, {
+    ...weekly(),
+    title: 'Weekly low',
+    priority: 'LOW',
+  });
+  const { task: highSeriesTask } = await taskService.createTask(USER, {
+    ...weekly(),
+    title: 'Weekly high',
+    priority: 'HIGH',
+  });
+
+  const { tasks } = await taskService.listTasks(USER, {
+    collapseSeries: true,
+    sort: 'priority',
+    order: 'desc',
+    limit: 50,
+    offset: 0,
+    today: '2026-10-12',
+    showCompleted: true,
+  });
+  assert.deepEqual(tasks.map((task) => task.id), [highSeriesTask.id, lowSeriesTask.id]);
+});

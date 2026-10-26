@@ -51,7 +51,9 @@ export default function Layout() {
             <div className="flex items-center">
               {user ? (
                 <div className="flex items-center gap-4">
-                  <span className="text-sm text-slate-400 hidden md:block">{user.email}</span>
+                  <span className="text-sm text-slate-400 hidden md:block" title={user.headline || undefined}>
+                    {user.displayName || user.email}
+                  </span>
                   
                   {/* Settings Link */}
                   <Link 

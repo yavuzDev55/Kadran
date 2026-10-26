@@ -125,18 +125,34 @@ const parse = (query) => {
 };
 
 test('GET /tasks query: valid parameters are parsed, bad ones rejected', () => {
-  const { filters, error } = parse({ type: 'COURSE', from: '2026-10-01', to: '2026-10-31', isPinned: 'true', limit: '20', tags: 'A, b', collapseSeries: 'true' });
+  const { filters, error } = parse({
+    type: 'COURSE',
+    from: '2026-10-01',
+    to: '2026-10-31',
+    isPinned: 'true',
+    limit: '20',
+    tags: 'A, b',
+    collapseSeries: 'true',
+    sort: 'priority',
+    order: 'desc',
+  });
   assert.equal(error, undefined);
   assert.equal(filters.limit, 20);
   assert.equal(filters.isPinned, true);
   assert.deepEqual(filters.tags, ['a', 'b']);
   assert.equal(filters.collapseSeries, true);
+  assert.equal(filters.sort, 'priority');
+  assert.equal(filters.order, 'desc');
 
   assert.ok(parse({ type: 'NOPE' }).error);
+  assert.ok(parse({ sort: 'pinned' }).error);
+  assert.ok(parse({ order: 'sideways' }).error);
   assert.ok(parse({ limit: '999999' }).error);
   assert.ok(parse({ limit: 'abc' }).error);
   assert.ok(parse({ from: '2026-13-01' }).error);
   assert.ok(parse({ from: '2026-10-10', to: '2026-10-01' }).error);
   assert.equal(parse({}).filters.limit, 50);
+  assert.equal(parse({}).filters.sort, 'date');
+  assert.equal(parse({}).filters.order, 'asc');
   assert.equal(parse({ showCompleted: 'false' }).filters.showCompleted, false);
 });

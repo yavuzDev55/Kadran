@@ -5,6 +5,8 @@ import prisma from '../../config/database.js';
 const USER_PUBLIC_FIELDS = {
   id: true,
   email: true,
+  displayName: true,
+  headline: true,
   timeZone: true,
   weekStartsOn: true,
   dayStartHour: true,

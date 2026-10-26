@@ -13,7 +13,27 @@ export const occurrenceInclude = {
   tags: { include: { tag: true } },
 };
 
-const DEFAULT_ORDER = [{ date: 'asc' }, { rangeStartDate: 'asc' }, { id: 'asc' }];
+const SORT_FIELDS = {
+  priority: 'priority',
+  title: 'title',
+  created: 'createdAt',
+  type: 'type',
+};
+const ENUM_ORDER = {
+  priority: ['LOW', 'MEDIUM', 'HIGH'],
+  type: ['COURSE', 'EXAM', 'HOMEWORK', 'CUSTOM'],
+};
+
+const buildOrderBy = (sort = 'date', direction = 'asc') => {
+  if (sort === 'date') {
+    return [
+      { date: { sort: direction, nulls: 'last' } },
+      { rangeStartDate: { sort: direction, nulls: 'last' } },
+      { id: 'asc' },
+    ];
+  }
+  return [{ [SORT_FIELDS[sort]]: direction }, { id: 'asc' }];
+};
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
@@ -55,9 +75,33 @@ const buildWhere = (userId, filters) => {
 
 // ─── Collapsed list (one row per series) ──────────────────────────────────────
 
-const sortKey = (row) => {
-  const value = row.date ?? row.rangeStartDate;
-  return value ? toDateStr(value) : '9999-99-99'; // ANY_TIME goes last
+const compareNullable = (left, right, direction, compare) => {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return compare(left, right) * (direction === 'desc' ? -1 : 1);
+};
+
+const compareValues = (left, right, sort) => {
+  if (left instanceof Date && right instanceof Date) return left.getTime() - right.getTime();
+  const enumValues = ENUM_ORDER[sort];
+  if (enumValues) return enumValues.indexOf(left) - enumValues.indexOf(right);
+  return String(left).localeCompare(String(right));
+};
+
+const compareCollapsedRows = (a, b, sort, direction) => {
+  let result = 0;
+
+  if (sort === 'date') {
+    result =
+      compareNullable(a.date, b.date, direction, (left, right) => compareValues(left, right, sort)) ||
+      compareNullable(a.rangeStartDate, b.rangeStartDate, direction, (left, right) => compareValues(left, right, sort));
+  } else {
+    const key = SORT_FIELDS[sort];
+    result = compareNullable(a[key], b[key], direction, (left, right) => compareValues(left, right, sort));
+  }
+
+  return result || a.id - b.id;
 };
 
 /**
@@ -95,13 +139,23 @@ const loadSeriesStats = async (seriesIds) => {
 };
 
 const findCollapsed = async (userId, filters) => {
-  const { today, limit, offset } = filters;
+  const { today, limit, offset, sort = 'date', order = 'asc' } = filters;
   const where = buildWhere(userId, filters);
 
   const rows = await prisma.task.findMany({
     where,
-    select: { id: true, seriesId: true, date: true, rangeStartDate: true, isCompleted: true },
-    orderBy: DEFAULT_ORDER,
+    select: {
+      id: true,
+      seriesId: true,
+      date: true,
+      rangeStartDate: true,
+      isCompleted: true,
+      priority: true,
+      title: true,
+      createdAt: true,
+      type: true,
+    },
+    orderBy: buildOrderBy(),
   });
 
   const entries = [];
@@ -116,7 +170,7 @@ const findCollapsed = async (userId, filters) => {
   }
   for (const seriesRows of bySeries.values()) entries.push(pickRepresentative(seriesRows, today));
 
-  entries.sort((a, b) => sortKey(a).localeCompare(sortKey(b)) || a.id - b.id);
+  entries.sort((a, b) => compareCollapsedRows(a, b, sort, order));
 
   const total = entries.length;
   const page = entries.slice(offset, offset + limit);
@@ -146,7 +200,7 @@ export const findTasksByUser = async (userId, filters) => {
     prisma.task.findMany({
       where,
       include: taskInclude,
-      orderBy: DEFAULT_ORDER,
+      orderBy: buildOrderBy(filters.sort, filters.order),
       take: filters.limit,
       skip: filters.offset,
     }),

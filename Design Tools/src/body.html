@@ -1,0 +1,203 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-course" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M8 7.5h8"/></symbol>
+  <symbol id="i-exam" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="1.5"/><path d="M9 4V3h6v1M9 13l2 2 4-4"/></symbol>
+  <symbol id="i-homework" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></symbol>
+  <symbol id="i-custom" viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4M6 5h11l-2 4 2 4H6"/></symbol>
+  <symbol id="i-start" viewBox="0 0 24 24"><path d="M4 5h16M12 5v14M8 15l4 4 4-4"/></symbol>
+  <symbol id="i-any" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke-dasharray="2.2 2.6"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path class="pin" d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<!-- ===== uygulama ===== -->
+<div class="wrap" id="app" hidden>
+  <div class="appbar">
+    <div class="mark"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="var(--ink)" stroke-width="1.6"/><path d="M14 4v3M24 14h-3M14 24v-3M4 14h3" stroke="var(--ink)" stroke-width="1.6"/><path d="M14 14V8.5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/><path d="M14 14l5 3" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/></svg>Kadran</div>
+    <nav class="nav" aria-label="Main">
+      <button type="button" data-go="dashboard"><svg viewBox="0 0 24 24"><use href="#i-grid"/></svg>Dashboard</button>
+      <button type="button" data-go="calendar"><svg viewBox="0 0 24 24"><use href="#i-cal"/></svg>Calendar</button>
+      <button type="button" data-go="tasks"><svg viewBox="0 0 24 24"><use href="#i-list"/></svg>Tasks</button>
+    </nav>
+    <button class="btn primary sm" type="button" data-go="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New task</button>
+    <div class="meWrap">
+      <button class="me" id="meBtn" type="button" aria-haspopup="menu" aria-expanded="false"></button>
+      <div class="menu" id="menu" role="menu" hidden>
+        <button type="button" role="menuitem" data-go="settings"><svg viewBox="0 0 24 24"><use href="#i-user"/></svg>Settings</button>
+        <button type="button" role="menuitem" id="signout"><svg viewBox="0 0 24 24"><use href="#i-out"/></svg>Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <main class="page" id="pg-dashboard" hidden>
+    <div class="phead"><h1 id="greet">Good evening</h1><div class="sub2" id="dateline"></div></div>
+    <section class="panel nowp" id="nowp" aria-live="polite"></section>
+    <div class="dgrid">
+      <section class="panel" aria-labelledby="h-list">
+        <div class="ph"><h3 id="h-list">Tasks</h3>
+          <div class="seg" role="radiogroup" aria-label="Range"><label><input type="radio" name="span" value="today" checked><span>Today</span></label><label><input type="radio" name="span" value="week"><span>This week</span></label></div>
+        </div>
+        <div class="pb" id="listpanel"></div>
+      </section>
+      <div class="dcol">
+        <section class="panel" aria-labelledby="h-pin"><div class="ph"><h3 id="h-pin">Pinned</h3><span class="cnt" id="c-pin"></span></div><div class="pb" id="pinpanel"></div></section>
+        <section class="panel" aria-labelledby="h-hi"><div class="ph"><h3 id="h-hi">High priority</h3><span class="cnt" id="c-hi"></span></div><div class="pb" id="hipanel"></div></section>
+        <section class="panel" aria-labelledby="h-any"><div class="ph"><h3 id="h-any">Anytime</h3><span class="cnt" id="c-any"></span></div><div class="pb" id="anypanel"></div></section>
+      </div>
+    </div>
+  </main>
+
+  <!-- Calendar -->
+  <main class="page cal" id="pg-calendar" hidden>
+    <div class="stage" id="stage">
+      <div class="sheet" id="sheet">
+        <div class="hero">
+          <div class="banner" id="banner" aria-hidden="true"></div>
+          <div class="ttl"><h2><span id="ttl" style="font:inherit;color:inherit;margin:0">October</span><span id="yr">2026</span></h2></div>
+        </div>
+        <div class="tools">
+          <div class="seg" role="radiogroup" aria-label="View"><label><input type="radio" name="view" value="week" checked><span>Week</span></label><label><input type="radio" name="view" value="month"><span>Month</span></label></div>
+          <label class="tgl grow" id="compactw"><span class="switch"><input type="checkbox" role="switch" id="compact" checked aria-label="Compact empty hours"><span></span></span>Compact empty hours</label>
+          <button class="btn icon" id="prev" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button class="btn" id="todaybtn" type="button">Today</button>
+          <button class="btn icon" id="next" type="button" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+        <div id="calbody"></div>
+        <div class="legendbar">
+          <span><i class="sw8 ty-course fillbg" style="--c:var(--c-course)"></i>Course</span>
+          <span><i class="sw8 ty-exam fillbg" style="--c:var(--c-exam)"></i>Exam</span>
+          <span><i class="sw8 ty-homework fillbg" style="--c:var(--c-homework)"></i>Homework</span>
+          <span><i class="sw8 ty-custom fillbg" style="--c:var(--c-custom)"></i>Custom</span>
+          <span>Folded corner: high priority</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Tasks -->
+  <main class="page" id="pg-tasks" hidden>
+    <div class="phead"><h1>Tasks</h1></div>
+    <div class="tlayout">
+      <aside class="panel fpanel" role="search" aria-label="Filters">
+        <div class="srch"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input class="input" id="q" type="search" placeholder="Search tasks" aria-label="Search tasks" autocomplete="off"></div>
+        <div class="fg"><div class="fl">Type</div><div class="chips" id="ftype"></div></div>
+        <div class="fg"><div class="fl">Priority</div><div class="chips" id="fpri"></div></div>
+        <div class="fg"><div class="fl">Tags</div><div class="chips" id="ftag"></div></div>
+        <div class="fg"><div class="fl">Status</div><div class="seg" role="radiogroup" aria-label="Status"><label><input type="radio" name="status" value="all" checked><span>All</span></label><label><input type="radio" name="status" value="open"><span>Open</span></label><label><input type="radio" name="status" value="done"><span>Done</span></label></div></div>
+        <div class="fg"><div class="fl">Sort</div><select class="input sel" id="sort" aria-label="Sort by"><option value="date">Date</option><option value="pri">Priority</option><option value="title">Title</option></select></div>
+        <div class="ffoot"><span class="muted" id="count"></span><button class="link" type="button" id="clear" hidden>Clear filters</button></div>
+      </aside>
+      <section class="tmain" id="cards" aria-live="polite"></section>
+    </div>
+  </main>
+
+  <!-- New / edit task -->
+  <main class="page" id="pg-new" hidden>
+    <div class="phead"><h1 id="fhead">New task</h1></div>
+    <div class="formgrid">
+      <div class="formcol">
+        <div class="field"><label for="ft">Title</label><input class="input" id="ft" maxlength="80" autocomplete="off" placeholder="What do you need to do?"><span class="err" id="fte" hidden>Enter a title to save the task.</span></div>
+        <div><div class="lbl" style="margin-bottom:8px">Type</div>
+          <div class="typepick">
+            <label style="--c:var(--c-course)" class="ty-course"><input type="radio" name="ftp" value="course"><span><span class="ti"><svg viewBox="0 0 24 24"><use href="#i-course"/></svg></span>Course</span></label>
+            <label style="--c:var(--c-exam)" class="ty-exam"><input type="radio" name="ftp" value="exam"><span><span class="ti"><svg viewBox="0 0 24 24"><use href="#i-exam"/></svg></span>Exam</span></label>
+            <label style="--c:var(--c-homework)" class="ty-homework"><input type="radio" name="ftp" value="homework"><span><span class="ti"><svg viewBox="0 0 24 24"><use href="#i-homework"/></svg></span>Homework</span></label>
+            <label style="--c:var(--c-custom)" class="ty-custom"><input type="radio" name="ftp" value="custom"><span><span class="ti"><svg viewBox="0 0 24 24"><use href="#i-custom"/></svg></span>Custom</span></label>
+          </div></div>
+        <div><div class="lbl" style="margin-bottom:8px">Color</div><div class="colors" id="fcolors"></div></div>
+        <div><div class="lbl" style="margin-bottom:8px">Time</div>
+          <div class="seg" role="radiogroup" aria-label="Time kind">
+            <label><input type="radio" name="fk" value="timed" checked><span>Start and end</span></label>
+            <label><input type="radio" name="fk" value="open"><span>Start only</span></label>
+            <label><input type="radio" name="fk" value="deadline"><span>Due time</span></label>
+            <label><input type="radio" name="fk" value="allday"><span>All day</span></label>
+            <label><input type="radio" name="fk" value="anytime"><span>Anytime</span></label>
+          </div></div>
+        <div class="pair2">
+          <div class="field" id="fdw"><label for="fd">Date</label><input class="input" id="fd" type="date"></div>
+          <div class="field" id="fuw" hidden><label for="fd2">Until (optional)</label><input class="input" id="fd2" type="date"></div>
+        </div>
+        <div class="field" id="fstw"><label for="startbtn" id="startlbl">Starts</label>
+          <button class="input fld" id="startbtn" type="button" aria-haspopup="dialog" aria-expanded="false"><span id="startv">09:30</span><svg viewBox="0 0 24 24"><use href="#i-clock"/></svg></button>
+          <div class="dialpop" id="dialpop" hidden role="dialog" aria-label="Choose time">
+            <div class="clock"><svg viewBox="-116 -116 232 232" id="clocksvg"></svg></div>
+            <div class="tfield" role="group" aria-label="Time"><button type="button" id="th" aria-pressed="true">09</button><span>:</span><button type="button" id="tm" aria-pressed="false">30</button></div>
+            <div class="row"><input class="input" id="tkey" value="09:30" maxlength="5" inputmode="numeric" aria-label="Type a time" style="width:92px;min-height:36px"><button class="btn sm primary" type="button" id="dialok">Done</button></div>
+          </div>
+        </div>
+        <div id="lenwrap"><div class="lbl" style="margin-bottom:8px">Length</div>
+          <div class="chips" id="chips"><button class="chip" type="button" data-m="30">30 min</button><button class="chip" type="button" data-m="60">1 h</button><button class="chip" type="button" data-m="90">1.5 h</button><button class="chip" type="button" data-m="120">2 h</button></div>
+          <p class="endl" id="endl" style="margin-top:8px"></p></div>
+        <div><div class="lbl" style="margin-bottom:8px">Priority</div>
+          <div class="seg" role="radiogroup" aria-label="Priority"><label><input type="radio" name="fp" value="low"><span>Low</span></label><label><input type="radio" name="fp" value="med"><span>Medium</span></label><label><input type="radio" name="fp" value="high"><span>High</span></label></div></div>
+        <div class="field"><label for="ftagin">Tags</label>
+          <input class="input" id="ftagin" maxlength="16" placeholder="Type a tag, press Enter" autocomplete="off">
+          <div class="chips" id="ftags" style="margin-top:6px"></div>
+          <div class="chips" id="ftagall" style="margin-top:4px"></div></div>
+        <div class="field"><label for="fdesc">Note</label><input class="input" id="fdesc" maxlength="120" placeholder="Optional"></div>
+        <div class="sw-row" id="frepw"><span>Repeat weekly for 3 weeks</span><label class="switch"><input type="checkbox" role="switch" id="frep" aria-label="Repeat weekly"><span></span></label></div>
+        <div class="row"><button class="btn primary" type="button" id="fsave">Create task</button><button class="btn" type="button" id="fcancel">Cancel</button></div>
+      </div>
+      <div class="pvwrap"><div class="lbl">Preview</div><div class="pvcol" id="pv"></div><p class="muted" style="font-size:12px">This is how it will look.</p></div>
+    </div>
+  </main>
+
+  <!-- Settings -->
+  <main class="page" id="pg-settings" hidden style="gap:0">
+    <div class="phead"><h1>Settings</h1></div>
+    <section class="sec" style="padding-block:28px 4px">
+      <div class="sec-head"><h2>Profile</h2></div>
+      <form class="sgrid" id="pform" novalidate>
+        <div class="who"><div class="av lg" id="pav"></div>
+          <div><div class="lbl" style="margin-bottom:8px">Avatar color</div><div class="colors" id="pcolors"></div></div></div>
+        <div class="field"><label for="pname">Display name</label><input class="input" id="pname" maxlength="24" autocomplete="nickname"><span class="err" id="pname-e" hidden></span></div>
+        <div class="field"><div class="cl"><label for="phead">Headline</label><small id="pcount">0/60</small></div><input class="input" id="phead" maxlength="60" placeholder="For example: CS student, year 2"></div>
+        <div class="savebar"><button class="btn primary" type="submit">Save profile</button><button class="btn" type="button" id="pdiscard">Discard</button></div>
+      </form>
+    </section>
+    <section class="sec" style="padding-block:44px 4px">
+      <div class="sec-head"><h2>Appearance</h2></div>
+      <div class="sgrid">
+        <div>
+          <div class="rowset"><span class="n">Theme</span><div class="seg" role="radiogroup" aria-label="Theme setting"><label><input type="radio" name="set-theme" value="light" checked><span>Light</span></label><label><input type="radio" name="set-theme" value="dark"><span>Dark</span></label><label><input type="radio" name="set-theme" value="system"><span>System</span></label></div></div>
+          <div class="rowset"><label class="n" for="cmp">Compact empty hours</label><span class="switch"><input type="checkbox" role="switch" id="cmp" checked><span></span></span></div>
+        </div>
+        <div><div class="sub">Default task colors</div><div id="catrows"></div></div>
+      </div>
+    </section>
+    <section class="sec" style="padding-block:44px 8px">
+      <div class="sec-head"><h2>Account</h2></div>
+      <div class="sgrid">
+        <div class="field"><label for="pmail">Email</label><input class="input" id="pmail" value="selim@example.com" readonly aria-readonly="true" style="color:var(--ink-2)"></div>
+        <div><button class="btn" type="button" id="pwbtn">Change password</button></div>
+        <div class="zone"><p>Deleting your account removes all tasks. This can't be undone.</p><button class="btn danger" type="button" id="delacc">Delete account</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===== giriş / kayıt ===== -->
+<div id="authpg" hidden>
+  <div class="auth">
+    <div class="art" id="art" aria-hidden="true"></div>
+    <div class="authform">
+      <div class="mark" style="margin-right:0"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="var(--ink)" stroke-width="1.6"/><path d="M14 4v3M24 14h-3M14 24v-3M4 14h3" stroke="var(--ink)" stroke-width="1.6"/><path d="M14 14V8.5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/><path d="M14 14l5 3" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/></svg>Kadran</div>
+      <h1 id="atitle"></h1>
+      <p class="lead" id="alead"></p>
+      <form id="aform" novalidate></form>
+      <p class="alt" id="aalt"></p>
+    </div>
+  </div>
+</div>
+
+<div id="modalhost"></div>
+<div class="toast" id="toast" hidden></div>

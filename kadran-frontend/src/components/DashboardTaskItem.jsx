@@ -3,12 +3,7 @@
 import { formatTaskTime } from "../utils/formatTime";
 import { formatDateLabel } from "../utils/dashboardUtils";
 import { TASK_TYPES } from "../utils/taskRules";
-
-const PRIORITY_STYLES = {
-  HIGH: "bg-red-900/50 text-red-300",
-  MEDIUM: "bg-yellow-900/50 text-yellow-300",
-  LOW: "bg-slate-700 text-slate-300",
-};
+import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
 
 const typeLabel = (type) => TASK_TYPES.find((t) => t.id === type)?.label || type;
 
@@ -21,7 +16,7 @@ export default function DashboardTaskItem({
   onTogglePin,
   onClick,
 }) {
-  const accentColor = item.effectiveColor || "#94a3b8";
+  const accentColor = getTaskDisplayColor(item);
   const timeLabel = formatTaskTime(item, timeFormat);
   // A multi-day item shows its whole range, so a separate date label would repeat it
   const dateLabel = showDate && item.timeType !== "MULTI_DAY" ? formatDateLabel(item.date, todayStr) : "";
@@ -42,10 +37,12 @@ export default function DashboardTaskItem({
   return (
     <li
       onClick={() => onClick && onClick(item)}
-      style={{ borderLeftColor: accentColor }}
-      className={`flex items-center gap-3 p-2.5 rounded border-l-4 bg-slate-800/80 border border-slate-700/60 ${
-        onClick ? "cursor-pointer hover:brightness-110" : ""
-      } ${item.isCompleted ? "opacity-50" : ""}`}
+      style={{ "--task-color": accentColor }}
+      className={`kadran-task kadran-task-row has-action type-${item.type.toLowerCase()} priority-${item.priority.toLowerCase()} ${
+        item.timeType === "DEADLINE" ? "is-deadline" : item.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
+      } flex items-center gap-3 p-2.5 rounded ${
+        onClick ? "cursor-pointer hover:border-ink/30" : ""
+      } ${item.isCompleted ? "is-completed" : ""}`}
     >
       {onToggle && item.isCompletable !== false && (
         <input
@@ -58,10 +55,10 @@ export default function DashboardTaskItem({
       )}
 
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold truncate ${item.isCompleted ? "line-through text-slate-400" : "text-slate-100"}`}>
+        <p className={`task-title text-sm font-semibold truncate ${item.isCompleted ? "text-muted" : ""}`}>
           {item.title}
         </p>
-        <p className="text-xs text-slate-400 truncate">{meta}</p>
+        <p className="text-xs text-muted truncate">{meta}</p>
       </div>
 
       {onTogglePin && (
@@ -78,13 +75,7 @@ export default function DashboardTaskItem({
         </button>
       )}
 
-      <span
-        className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
-          PRIORITY_STYLES[item.priority] || PRIORITY_STYLES.MEDIUM
-        }`}
-      >
-        {item.priority}
-      </span>
+      <span className="shrink-0 text-[10px] font-semibold text-muted">{item.priority}</span>
     </li>
   );
 }

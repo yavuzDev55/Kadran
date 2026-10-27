@@ -45,12 +45,12 @@ export default function CalendarMonthView({
   for (let i = 0; i < monthDays.length; i += 7) weeks.push(monthDays.slice(i, i + 7));
 
   return (
-    <div className="flex flex-col w-full bg-slate-900 border border-slate-700 rounded-lg overflow-hidden shadow-xl">
-      <div className="grid grid-cols-7 border-b border-slate-700 bg-slate-800/50">
+    <div className="calendar-cork flex flex-col w-full bg-surface border border-border/20 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 border-b border-border/20 bg-surface-muted/60">
         {dayLabels.map((day) => (
           <div
             key={day}
-            className="p-2 text-center text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-700/50 last:border-r-0"
+            className="p-2 text-center text-xs font-bold text-muted uppercase tracking-wider border-r border-border/20 last:border-r-0"
           >
             {day}
           </div>
@@ -61,7 +61,7 @@ export default function CalendarMonthView({
         const { spans: bars, rowCount } = placeSpans(spans, week[0], week[6]);
 
         return (
-          <div key={week[0]} className="relative border-b border-slate-700/50 last:border-b-0">
+          <div key={week[0]} className="relative border-b border-border/20 last:border-b-0">
             {/* Cell backgrounds and borders */}
             <div className="absolute inset-0 grid grid-cols-7 pointer-events-none">
               {week.map((dateStr) => {
@@ -70,8 +70,8 @@ export default function CalendarMonthView({
                 return (
                   <div
                     key={`bg-${dateStr}`}
-                    className={`border-r border-slate-700/50 last:border-r-0 ${
-                      isToday ? "bg-slate-800/40 ring-1 ring-inset ring-blue-500/50" : !inMonth ? "bg-slate-900/80" : ""
+                    className={`border-r border-border/20 last:border-r-0 ${
+                      isToday ? "bg-accent/10 ring-1 ring-inset ring-accent/50" : !inMonth ? "bg-surface-muted/70" : ""
                     }`}
                   />
                 );
@@ -88,7 +88,7 @@ export default function CalendarMonthView({
                     <div
                       key={`num-${dateStr}`}
                       className={`text-right text-sm px-2 pt-1 font-medium ${
-                        isToday ? "text-blue-400" : inMonth ? "text-slate-400" : "text-slate-600"
+                        isToday ? "text-accent font-bold" : inMonth ? "text-muted" : "text-muted/50"
                       }`}
                     >
                       {parseDate(dateStr).getUTCDate()}
@@ -118,7 +118,7 @@ export default function CalendarMonthView({
                   return (
                     <div
                       key={`events-${dateStr}`}
-                      className={`p-1 pb-2 flex flex-col gap-1 min-w-0 ${inMonth ? "" : "opacity-60"}`}
+                      className={`p-1 pb-2 flex flex-col gap-1 min-w-0 ${inMonth ? "" : "opacity-55"}`}
                     >
                       {shown.map((event) => (
                         <CalendarEventCard
@@ -134,7 +134,7 @@ export default function CalendarMonthView({
                         <button
                           type="button"
                           onClick={() => toggleDay(dateStr)}
-                          className="text-[10px] text-blue-400 hover:text-blue-300 text-left px-1"
+                          className="text-[10px] text-link hover:text-accent text-left px-1"
                         >
                           {open ? "Show less" : `+${hidden} more`}
                         </button>

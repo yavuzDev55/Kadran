@@ -11,14 +11,14 @@ const DAY_LABELS = {
 };
 const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
 const smallInputClass =
-  "w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm focus:outline-none focus:border-blue-500";
+  "ui-input text-sm";
 
 function Field({ label, children, hint }) {
   return (
     <div>
-      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      <label className="block text-xs text-muted mb-1">{label}</label>
       {children}
-      {hint && <p className="text-[11px] text-slate-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-muted mt-1">{hint}</p>}
     </div>
   );
 }
@@ -31,19 +31,19 @@ export default function TaskRecurrenceFields({
   onSetSlot,
 }) {
   return (
-    <div className="border-t border-slate-700 pt-3 mt-1 flex flex-col gap-3">
+    <div className="border-t border-border/20 pt-3 mt-1 flex flex-col gap-3">
       <label className="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"
           checked={form.recurring}
           onChange={(e) => set({ recurring: e.target.checked })}
-          className="w-4 h-4 accent-blue-600"
+          className="w-4 h-4 accent-accent"
         />
-        <span className="text-sm font-semibold text-slate-200">Repeat this task</span>
+        <span className="text-sm font-semibold text-ink">Repeat this task</span>
       </label>
 
       {form.recurring && (
-        <div className="flex flex-col gap-4 p-3 bg-slate-900/50 rounded border border-slate-700/50">
+        <div className="flex flex-col gap-4 p-3 bg-surface-muted rounded border border-border/20">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="Repeats">
               <select
@@ -124,17 +124,19 @@ export default function TaskRecurrenceFields({
 
           {form.pattern === "WEEKLY" && (
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-slate-400">Days (each day can have its own time)</span>
+              <span className="text-xs text-muted">Days (each day can have its own time)</span>
               <div className="flex flex-wrap gap-1.5">
                 {WEEKDAYS.map((day) => (
                   <button
                     key={day}
                     type="button"
                     onClick={() => onToggleWeekDay(day)}
+                    aria-label={DAY_LABELS[day]}
+                    aria-pressed={form.weekDays.includes(day)}
                     className={`px-2.5 py-1 text-xs rounded border transition ${
                       form.weekDays.includes(day)
-                        ? "bg-blue-600 border-blue-500 text-white"
-                        : "bg-slate-900 border-slate-600 text-slate-300 hover:bg-slate-700"
+                        ? "bg-accent border-accent text-accent-ink"
+                        : "bg-surface border-border/20 text-muted hover:bg-canvas"
                     }`}
                   >
                     {DAY_LABELS[day].slice(0, 3)}
@@ -142,12 +144,13 @@ export default function TaskRecurrenceFields({
                 ))}
               </div>
               {form.weekDays.map((day) => (
-                <div key={day} className="grid grid-cols-[90px_1fr_1fr] items-center gap-2">
-                  <span className="text-xs text-slate-300">{DAY_LABELS[day]}</span>
+                <div key={day} className="grid grid-cols-1 sm:grid-cols-[90px_1fr_1fr] items-center gap-2">
+                  <span className="text-xs text-muted">{DAY_LABELS[day]}</span>
                   <input
                     type="time"
                     value={form.slots[day]?.startTime || ""}
                     onChange={(e) => onSetSlot(day, { startTime: e.target.value })}
+                    aria-label={`${DAY_LABELS[day]} start time`}
                     className={smallInputClass}
                     required
                   />
@@ -156,11 +159,12 @@ export default function TaskRecurrenceFields({
                       type="time"
                       value={form.slots[day]?.endTime || ""}
                       onChange={(e) => onSetSlot(day, { endTime: e.target.value })}
+                      aria-label={`${DAY_LABELS[day]} end time`}
                       className={smallInputClass}
                       required
                     />
                   ) : (
-                    <span />
+                    <span className="hidden sm:block" />
                   )}
                 </div>
               ))}

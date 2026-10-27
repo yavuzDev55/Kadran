@@ -9,12 +9,12 @@ import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import ConfirmDialog from "../components/ConfirmDialog";
 import FilterSidebar from "../components/FilterSidebar";
-import TagCombobox from "../components/TagCombobox";
 import { setTaskPinned } from "../services/taskService";
 import { DEFAULT_FILTERS } from "../utils/filters";
 import { formatTaskTime } from "../utils/formatTime";
 import { getTodayInTimezone, sliceDate } from "../utils/dateUtils";
 import { TASK_TYPES } from "../utils/taskRules";
+import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
 
 const PAGE_SIZE = 50;
 const FILTER_DEBOUNCE_MS = 250;
@@ -26,11 +26,14 @@ const SORT_OPTIONS = [
   { value: "type", label: "Task type" },
 ];
 const DEFAULT_TASK_FILTERS = { ...DEFAULT_FILTERS, sort: "date", order: "asc" };
+const TASK_VIEW_STORAGE_KEY = "kadran_task_view";
 
-const PRIORITY_STYLES = {
-  HIGH: "bg-red-900 text-red-200",
-  MEDIUM: "bg-amber-900 text-amber-200",
-  LOW: "bg-green-900 text-green-200",
+const readTaskView = () => {
+  try {
+    return localStorage.getItem(TASK_VIEW_STORAGE_KEY) === "grid" ? "grid" : "list";
+  } catch {
+    return "list";
+  }
 };
 
 const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
@@ -61,26 +64,16 @@ const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).fi
 
 const errorMessage = (err, fallback) => err.response?.data?.error?.message || fallback;
 
-function TagChips({ tags, onRemove }) {
+function TagChips({ tags }) {
   if (!tags || tags.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-2">
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-blue-400 text-xs rounded border border-slate-600"
+          className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-muted text-link text-xs rounded border border-border/20"
         >
           #{tag}
-          {onRemove && (
-            <button
-              type="button"
-              onClick={() => onRemove(tag)}
-              className="text-slate-500 hover:text-red-400 leading-none"
-              aria-label={`Remove tag ${tag}`}
-            >
-              ×
-            </button>
-          )}
         </span>
       ))}
     </div>
@@ -93,7 +86,8 @@ function IconButton({ onClick, title, className = "", children }) {
       type="button"
       onClick={onClick}
       title={title}
-      className={`p-2 rounded transition hover:bg-slate-600/50 ${className}`}
+      aria-label={title}
+      className={`ui-button ui-button--icon ${className}`}
     >
       {children}
     </button>
@@ -112,33 +106,35 @@ const TrashIcon = () => (
 
 /** One occurrence inside an expanded series. */
 function OccurrenceRow({ task, timeFormat, onToggle, onEdit, onDelete }) {
+  const accentColor = getTaskDisplayColor(task);
   return (
     <li
-      className={`flex items-center gap-3 px-3 py-2 rounded border ${
-        task.isCompleted ? "bg-slate-900/50 border-slate-800 opacity-70" : "bg-slate-800 border-slate-600"
-      }`}
+      style={{ "--task-color": accentColor }}
+      className={`kadran-task kadran-task-row has-action type-${task.type.toLowerCase()} priority-${task.priority.toLowerCase()} ${
+        task.timeType === "DEADLINE" ? "is-deadline" : task.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
+      } flex items-center gap-3 px-3 py-2 rounded ${task.isCompleted ? "is-completed" : ""}`}
     >
       {task.isCompletable ? (
         <input
           type="checkbox"
           checked={task.isCompleted}
           onChange={() => onToggle(task)}
-          className="w-4 h-4 cursor-pointer accent-blue-600"
+          className="w-4 h-4 cursor-pointer accent-[rgb(var(--color-accent))] relative z-[1]"
         />
       ) : (
         <span className="w-4" />
       )}
-      <span className={`flex-1 text-sm ${task.isCompleted ? "line-through text-slate-500" : "text-slate-200"}`}>
+      <span className={`task-title flex-1 text-sm ${task.isCompleted ? "text-muted" : ""}`}>
         <span>{describeWhen(task, timeFormat)}</span>
-        {task.description && <span className="block text-xs text-slate-400 mt-1">{task.description}</span>}
+        {task.description && <span className="block text-xs text-muted mt-1">{task.description}</span>}
       </span>
-      <button type="button" onClick={() => onEdit(task)} className="text-xs text-slate-400 hover:text-white px-2 py-1">
+      <button type="button" onClick={() => onEdit(task)} className="text-xs text-muted hover:text-ink px-2 py-1">
         Edit
       </button>
       <button
         type="button"
         onClick={() => onDelete(task)}
-        className="text-xs text-slate-400 hover:text-red-400 px-2 py-1"
+        className="text-xs text-muted hover:text-danger px-2 py-1"
       >
         Delete
       </button>
@@ -160,6 +156,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState(readTaskView);
 
   // seriesId -> { loading, tasks } for expanded series
   const [expanded, setExpanded] = useState({});
@@ -375,45 +372,27 @@ export default function TasksPage() {
     }
   };
 
-  // ── Tags ──
-  const addTag = async (task, name) => {
-    try {
-      if (task.seriesId != null) await api.post(`/series/${task.seriesId}/tags`, { name });
-      else await api.post(`/tasks/${task.id}/tags`, { name });
-      const tags = [...(task.tags || []), name];
-      if (task.seriesId != null) patchSeriesRows(task.seriesId, { tags });
-      else patchTask(task.id, { tags });
-    } catch (err) {
-      toast.error(errorMessage(err, "Failed to add tag."));
-    }
-  };
-
-  // Removing needs the tag id; task.tags only carries names
-  const removeTag = async (task, name) => {
-    try {
-      const lookup = await api.get("/tags", { params: { filter: name, limit: 50 } });
-      const tag = (lookup.data.tags || []).find((t) => t.name === name);
-      if (!tag) throw new Error("tag not found");
-      await api.delete(`/tasks/${task.id}/tags/${tag.id}`);
-      patchTask(task.id, { tags: (task.tags || []).filter((t) => t !== name) });
-    } catch {
-      toast.error("Failed to remove tag.");
-    }
-  };
-
   const editOccurrence = (task) => navigate(`/tasks/edit/${task.id}`);
 
   const rows = tasks;
+  const updateViewMode = (mode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(TASK_VIEW_STORAGE_KEY, mode);
+    } catch {
+      toast.error("View preference could not be saved in this browser.");
+    }
+  };
 
   return (
     <div className="p-2 md:p-4 mb-20">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold text-slate-100">Tasks</h1>
+        <h1 className="font-title text-3xl font-normal text-ink">Tasks</h1>
         <Link
           to="/tasks/new"
-          className="md:hidden px-3 py-1.5 rounded-md text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition"
+          className="ui-button ui-button--primary ui-button--sm md:hidden"
         >
-          + New Task
+          + New task
         </Link>
       </div>
 
@@ -426,23 +405,54 @@ export default function TasksPage() {
         />
 
         <div className="flex-1 min-w-0 w-full">
-          {error && <div className="p-3 mb-4 bg-red-900/50 border border-red-500 text-red-200 rounded">{error}</div>}
+          {error && <div className="p-3 mb-4 bg-danger/5 border border-danger/40 text-danger rounded">{error}</div>}
 
-          <div className="bg-slate-800 p-4 md:p-6 rounded-lg border border-slate-700 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-600 pb-3">
-              <h2 className="text-xl font-semibold text-slate-100">
+          <div className="ui-panel p-4 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-border/20 pb-3">
+              <h2 className="text-xl font-semibold text-ink">
                 My Tasks
-                {!loading && <span className="ml-2 text-sm font-normal text-slate-400">({total})</span>}
+                {!loading && <span className="ml-2 text-sm font-normal text-muted">({total})</span>}
               </h2>
-              <div className="flex items-center gap-2 text-sm text-slate-300">
-                <label htmlFor="task-sort" className="text-slate-400">
+              <div className="flex items-center gap-2 text-sm text-ink">
+                <div className="flex items-center rounded-md border border-border/20 bg-surface-muted p-1" role="group" aria-label="Task layout">
+                  <button
+                    type="button"
+                    aria-label="List view"
+                    aria-pressed={viewMode === "list"}
+                    onClick={() => updateViewMode("list")}
+                    className={`grid h-8 w-8 place-items-center rounded transition ${
+                      viewMode === "list" ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                      <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Grid view"
+                    aria-pressed={viewMode === "grid"}
+                    onClick={() => updateViewMode("grid")}
+                    className={`grid h-8 w-8 place-items-center rounded transition ${
+                      viewMode === "grid" ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                      <rect x="4" y="4" width="7" height="7" rx="1" />
+                      <rect x="13" y="4" width="7" height="7" rx="1" />
+                      <rect x="4" y="13" width="7" height="7" rx="1" />
+                      <rect x="13" y="13" width="7" height="7" rx="1" />
+                    </svg>
+                  </button>
+                </div>
+                <label htmlFor="task-sort" className="text-muted">
                   Sort by
                 </label>
                 <select
                   id="task-sort"
                   value={filters.sort}
                   onChange={(event) => updateSort(event.target.value)}
-                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-100"
+                  className="ui-input w-auto px-2 py-1.5"
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option value={option.value} key={option.value}>
@@ -455,7 +465,7 @@ export default function TasksPage() {
                   onClick={updateOrder}
                   aria-label={`Sort ${filters.order === "asc" ? "descending" : "ascending"}`}
                   title={`Currently ${filters.order === "asc" ? "ascending" : "descending"}`}
-                  className="rounded border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-slate-200 hover:bg-slate-700"
+                  className="ui-button px-2.5"
                 >
                   {filters.order === "asc" ? "↑" : "↓"}
                 </button>
@@ -463,23 +473,25 @@ export default function TasksPage() {
             </div>
 
             {loading ? (
-              <p className="text-slate-400 text-center py-6">Loading tasks...</p>
+              <p className="text-muted text-center py-6">Loading tasks...</p>
             ) : rows.length === 0 ? (
-              <p className="text-slate-400 text-center py-6">No tasks found matching your filters.</p>
+              <p className="text-muted text-center py-6">No tasks found matching your filters.</p>
             ) : (
-              <ul className="flex flex-col gap-4">
+              <ul className={viewMode === "grid" ? "tasks-grid" : "flex flex-col gap-4"}>
                 {rows.map((task) => {
                   const isSeries = task.seriesId != null;
                   const info = task.seriesInfo;
                   const open = isSeries ? expanded[task.seriesId] : null;
                   const allDone = isSeries && info ? info.completed >= info.total : task.isCompleted;
+                  const accentColor = getTaskDisplayColor(task);
 
                   return (
                     <li
                       key={task.id}
-                      className={`p-4 rounded-md border transition ${
-                        allDone ? "bg-slate-900/50 border-slate-800 opacity-75" : "bg-slate-700 border-slate-600"
-                      }`}
+                      style={{ "--task-color": accentColor }}
+                      className={`kadran-task kadran-task-row has-action type-${task.type.toLowerCase()} priority-${task.priority.toLowerCase()} ${
+                        task.timeType === "DEADLINE" ? "is-deadline" : task.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
+                      } p-4 rounded-md transition ${viewMode === "grid" ? "tasks-grid__card" : ""} ${allDone ? "is-completed" : ""}`}
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div className="flex items-start gap-4 min-w-0">
@@ -488,13 +500,13 @@ export default function TasksPage() {
                               type="checkbox"
                               checked={task.isCompleted}
                               onChange={() => toggleCompletion(task)}
-                              className="w-5 h-5 mt-1 cursor-pointer accent-blue-600"
+                              className="w-5 h-5 mt-1 cursor-pointer accent-[rgb(var(--color-accent))] relative z-[1]"
                             />
                           ) : isSeries ? (
                             <button
                               type="button"
                               onClick={() => toggleExpand(task.seriesId)}
-                              className="w-5 h-5 mt-1 text-slate-300 hover:text-white text-xs"
+                              className="w-5 h-5 mt-1 text-muted hover:text-ink text-xs relative z-[1]"
                               title={open ? "Hide occurrences" : "Show occurrences"}
                               aria-expanded={Boolean(open)}
                             >
@@ -507,38 +519,32 @@ export default function TasksPage() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <p
-                                className={`font-semibold text-base ${
-                                  allDone ? "text-slate-500 line-through" : "text-slate-100"
-                                }`}
+                                className={`task-title font-semibold text-base ${allDone ? "text-muted" : "text-ink"}`}
                               >
                                 {task.title}
                               </p>
-                              <span
-                                className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                                  PRIORITY_STYLES[task.priority]
-                                }`}
-                              >
+                              <span className="text-[10px] font-semibold text-muted">
                                 {task.priority}
                               </span>
                             </div>
 
                             {isSeries && task.series?.description && (
-                              <p className="text-sm text-slate-300 mt-1">{task.series.description}</p>
+                              <p className="text-sm text-muted mt-1">{task.series.description}</p>
                             )}
                             {task.description && (
-                              <p className="text-sm text-slate-300 mt-1">
+                              <p className="text-sm text-muted mt-1">
                                 {isSeries ? "This occurrence: " : ""}
                                 {task.description}
                               </p>
                             )}
 
-                            <div className="text-xs text-slate-400 mt-2 flex flex-wrap gap-2 items-center">
-                              <span className="uppercase font-bold text-blue-400 bg-blue-950 px-2 py-0.5 rounded border border-blue-900">
+                            <div className="text-xs text-muted mt-2 flex flex-wrap gap-2 items-center">
+                              <span className="uppercase font-bold text-link px-2 py-0.5 rounded border border-border/30">
                                 {typeLabel(task.type)}
                               </span>
                               {isSeries && info ? (
                                 <>
-                                  <span className="bg-purple-950 text-purple-300 px-2 py-0.5 rounded border border-purple-900 text-[10px] font-semibold">
+                                  <span className="text-link px-2 py-0.5 rounded border border-border/30 text-[10px] font-semibold">
                                     🔁 {PATTERN_LABELS[task.series?.pattern] || "Recurring"}
                                   </span>
                                   <span>
@@ -558,14 +564,14 @@ export default function TasksPage() {
                             </div>
 
                             {isSeries && info && (
-                              <p className="text-xs text-slate-500 mt-1">Next: {describeWhen(task, timeFormat)}</p>
+                              <p className="text-xs text-muted mt-1">Next: {describeWhen(task, timeFormat)}</p>
                             )}
 
-                            <TagChips tags={task.tags} onRemove={isSeries ? null : (name) => removeTag(task, name)} />
+                            <TagChips tags={task.tags} />
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="relative z-[1] flex items-center gap-1 shrink-0">
                           <IconButton
                             onClick={() => togglePin(task)}
                             title={task.isPinned ? "Unpin from dashboard" : "Pin to dashboard"}
@@ -578,7 +584,7 @@ export default function TasksPage() {
                               navigate(isSeries ? `/tasks/edit/${task.id}?scope=series` : `/tasks/edit/${task.id}`)
                             }
                             title={isSeries ? "Edit the whole series" : "Edit"}
-                            className="text-slate-400 hover:text-white"
+                            className="text-muted hover:text-ink"
                           >
                             ✎
                           </IconButton>
@@ -591,7 +597,7 @@ export default function TasksPage() {
                               )
                             }
                             title={isSeries ? "Delete the whole series" : "Delete"}
-                            className="text-slate-400 hover:text-red-500 hover:bg-red-500/10"
+                            className="text-muted hover:text-danger hover:bg-danger/10"
                           >
                             <TrashIcon />
                           </IconButton>
@@ -599,9 +605,9 @@ export default function TasksPage() {
                       </div>
 
                       {isSeries && open && (
-                        <div className="mt-3 pt-3 border-t border-slate-600/50">
+                        <div className="mt-3 pt-3 border-t border-border/20">
                           {open.loading ? (
-                            <p className="text-xs text-slate-400">Loading occurrences...</p>
+                            <p className="text-xs text-muted">Loading occurrences...</p>
                           ) : (
                             <ul className="flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
                               {open.tasks.map((occurrence) => (
@@ -625,14 +631,6 @@ export default function TasksPage() {
                         </div>
                       )}
 
-                      <div className="mt-3 pt-3 border-t border-slate-600/50">
-                        <TagCombobox
-                          selectedTags={task.tags || []}
-                          hideChips
-                          onAdd={(name) => addTag(task, name)}
-                          placeholder={isSeries ? "Add a tag to the whole series..." : "Add a tag..."}
-                        />
-                      </div>
                     </li>
                   );
                 })}
@@ -645,7 +643,7 @@ export default function TasksPage() {
                   type="button"
                   onClick={loadMore}
                   disabled={loadingMore}
-                  className="px-4 py-2 text-sm font-medium text-slate-200 bg-slate-700 hover:bg-slate-600 rounded border border-slate-600 transition disabled:opacity-60"
+                  className="ui-button disabled:opacity-60"
                 >
                   {loadingMore ? "Loading..." : "Load more"}
                 </button>

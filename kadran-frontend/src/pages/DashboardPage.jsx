@@ -21,6 +21,7 @@ import ActiveTaskPanel from "../components/ActiveTaskPanel";
 import AgendaPanel from "../components/AgendaPanel";
 import AnyTimePanel from "../components/AnyTimePanel";
 import TaskListPanel from "../components/TaskListPanel";
+import DeskIllustration from "../components/DeskIllustration";
 
 const CLOCK_TICK_MS = 30 * 1000;
 const WEEK_WINDOW_DAYS = 7;
@@ -172,14 +173,17 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-2 md:p-4 pb-12">
-      <h1 className="text-xl font-bold text-slate-100 mb-4">
-        {user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
-      </h1>
+    <div className="dashboard-page p-2 md:p-4 pb-12">
+      <div className="dashboard-heading mb-4">
+        <h1 className="font-title text-3xl font-normal text-ink">
+          {user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
+        </h1>
+        <DeskIllustration className="dashboard-illustration" />
+      </div>
 
       <div className="relative flex flex-col gap-4">
         {loading && (
-          <div className="absolute inset-0 bg-slate-900/50 z-30 flex items-center justify-center animate-pulse text-blue-400">
+          <div className="absolute inset-0 bg-surface/75 z-30 flex items-center justify-center animate-pulse text-accent">
             Loading...
           </div>
         )}

@@ -22,16 +22,16 @@ export default function TaskListPanel({
   const hidden = items.length - shown.length;
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col max-h-[420px]">
-      <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">
+    <section className="ui-panel p-4 flex flex-col max-h-[420px]">
+      <h2 className="text-sm font-bold text-ink uppercase tracking-wider mb-3">
         {title}
-        {items.length > 0 && <span className="ml-2 text-slate-500 font-normal">({items.length})</span>}
+        {items.length > 0 && <span className="ml-2 text-muted font-normal">({items.length})</span>}
       </h2>
 
       {error ? (
-        <p className="text-sm text-red-300 py-4 text-center">Could not load this list.</p>
+        <p className="text-sm text-danger py-4 text-center">Could not load this list.</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500 italic py-4 text-center">{emptyMessage}</p>
+        <p className="text-sm text-muted italic py-4 text-center">{emptyMessage}</p>
       ) : (
         <>
           <ul className="flex flex-col gap-2 overflow-y-auto pr-1">
@@ -49,7 +49,7 @@ export default function TaskListPanel({
             ))}
           </ul>
           {viewAllTo && hidden > 0 && (
-            <Link to={viewAllTo} className="mt-3 text-xs font-semibold text-blue-400 hover:text-blue-300 self-start">
+            <Link to={viewAllTo} className="mt-3 text-xs font-semibold text-link hover:text-accent self-start">
               View all in the task list →
             </Link>
           )}

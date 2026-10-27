@@ -1,5 +1,5 @@
-const VARIANTS = new Set(["primary", "danger"]);
-const SIZES = new Set(["sm", "md", "lg"]);
+const VARIANTS = new Set(["primary", "danger", "quiet"]);
+const SIZES = new Set(["xs", "sm", "md", "lg"]);
 
 export default function Button({
   children,

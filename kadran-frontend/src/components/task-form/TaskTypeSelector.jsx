@@ -8,11 +8,12 @@ export default function TaskTypeSelector({ value, disabled, onChange }) {
           key={type.id}
           type="button"
           disabled={disabled}
+          aria-pressed={value === type.id}
           onClick={() => onChange(type.id)}
           className={`p-3 rounded-lg border text-left transition disabled:cursor-not-allowed ${
             value === type.id
-              ? "bg-blue-600 border-blue-500 text-white shadow-lg"
-              : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800"
+              ? "bg-accent border-accent text-accent-ink"
+              : "bg-surface border-border/20 text-muted hover:bg-surface-muted disabled:opacity-40"
           }`}
         >
           <div className="font-bold text-sm">{type.label}</div>

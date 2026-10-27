@@ -26,7 +26,7 @@ export default function Switch({
         onChange={(event) => onChange(event.target.checked)}
       />
       <span className="ui-switch__track" aria-hidden="true" />
-      <span>
+      <span className="ui-switch__label">
         {label}
         {description && (
           <span className="ui-field__hint" id={descriptionId}>

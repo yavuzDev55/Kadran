@@ -11,6 +11,8 @@ import TaskDetailModal from "../components/TaskDetailModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import FilterSidebar from "../components/FilterSidebar";
 import { setTaskPinned } from "../services/taskService";
+import Switch from "../components/ui/Switch";
+import DeskIllustration from "../components/DeskIllustration";
 import { buildCalendarItems } from "../utils/calendarUtils";
 import {
   addDays,
@@ -24,6 +26,7 @@ import {
 import { DEFAULT_FILTERS } from "../utils/filters";
 
 const VIEW_STORAGE_KEY = "kadran_calendar_view";
+const COMPACT_HOURS_STORAGE_KEY = "kadran_calendar_compact_hours";
 
 // ANY_TIME tasks never appear on the calendar, so they are not offered as a filter
 const CALENDAR_TIME_TYPES = ["TIMED", "OPEN_ENDED", "MULTI_DAY", "DEADLINE"];
@@ -33,6 +36,14 @@ const readStoredView = () => {
     return localStorage.getItem(VIEW_STORAGE_KEY);
   } catch {
     return null;
+  }
+};
+
+const readStoredCompactHours = () => {
+  try {
+    return localStorage.getItem(COMPACT_HOURS_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
   }
 };
 
@@ -56,6 +67,7 @@ export default function CalendarPage() {
     if (stored === "week" || stored === "month") return stored;
     return user?.defaultView === "MONTH" ? "month" : "week";
   });
+  const [compactEmptyHours, setCompactEmptyHours] = useState(readStoredCompactHours);
 
   const setView = (next) => {
     setViewState(next);
@@ -63,6 +75,15 @@ export default function CalendarPage() {
       localStorage.setItem(VIEW_STORAGE_KEY, next);
     } catch {
       // storage unavailable: the view just is not remembered
+    }
+  };
+
+  const updateCompactHours = (compact) => {
+    setCompactEmptyHours(compact);
+    try {
+      localStorage.setItem(COMPACT_HOURS_STORAGE_KEY, String(compact));
+    } catch {
+      // The preference still applies for this page session when storage is unavailable.
     }
   };
 
@@ -216,6 +237,10 @@ export default function CalendarPage() {
   const handlePrevious = () => setAnchor((a) => (view === "week" ? addDays(a, -7) : shiftMonth(a, -1)));
   const handleNext = () => setAnchor((a) => (view === "week" ? addDays(a, 7) : shiftMonth(a, 1)));
   const handleGoToToday = () => setAnchor(today);
+  const handleCreateTask = (date, startTime, endTime) => {
+    const params = new URLSearchParams({ date, startTime, endTime });
+    navigate(`/tasks/new?${params.toString()}`);
+  };
 
   const navLabel =
     view === "week"
@@ -236,18 +261,23 @@ export default function CalendarPage() {
         : "This task will be permanently deleted. This cannot be undone.";
 
   return (
-    <div className="flex flex-col w-full mx-auto p-2 md:p-4 pb-12">
-      <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-4">
-        <h1 className="text-xl font-bold text-slate-100">Calendar</h1>
+    <div className="calendar-page mx-auto w-full p-2 md:p-4 pb-12">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-4 gap-4">
+        <div className="calendar-heading">
+          <h1 className="font-title text-3xl font-normal text-ink">Calendar</h1>
+          <DeskIllustration />
+        </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex bg-slate-800 p-1 rounded border border-slate-700">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex bg-surface-muted p-1 rounded border border-border/20" role="group" aria-label="Calendar view">
             {["week", "month"].map((option) => (
               <button
                 key={option}
+                type="button"
+                aria-pressed={view === option}
                 onClick={() => setView(option)}
-                className={`px-4 py-1 text-sm font-semibold rounded transition capitalize ${
-                  view === option ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"
+                className={`px-4 py-1.5 text-sm font-semibold rounded transition capitalize ${
+                  view === option ? "bg-surface text-ink border border-border/20" : "text-muted hover:text-ink"
                 }`}
               >
                 {option}
@@ -257,33 +287,44 @@ export default function CalendarPage() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleGoToToday}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-600 transition text-sm font-semibold"
+              className="ui-button ui-button--sm"
             >
               Today
             </button>
-            <div className="flex items-center bg-slate-800 rounded border border-slate-600 overflow-hidden">
+            <div className="flex items-center bg-surface rounded border border-border/25 overflow-hidden">
               <button
+                type="button"
                 onClick={handlePrevious}
-                className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-                aria-label="Previous"
+                className="px-3 py-1.5 text-muted hover:text-ink hover:bg-surface-muted transition"
+                aria-label={view === "week" ? "Previous week" : "Previous month"}
               >
                 &lt;
               </button>
-              <span className="px-4 text-sm font-semibold text-slate-200 min-w-[180px] text-center">{navLabel}</span>
+              <span className="px-4 text-sm font-semibold text-ink min-w-[180px] text-center">{navLabel}</span>
               <button
+                type="button"
                 onClick={handleNext}
-                className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-                aria-label="Next"
+                className="px-3 py-1.5 text-muted hover:text-ink hover:bg-surface-muted transition"
+                aria-label={view === "week" ? "Next week" : "Next month"}
               >
                 &gt;
               </button>
             </div>
           </div>
+          {view === "week" && (
+            <Switch
+              label="Compact empty hours"
+              checked={compactEmptyHours}
+              onChange={updateCompactHours}
+              className="text-xs"
+            />
+          )}
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 items-start">
+      <div className="calendar-workspace flex flex-col md:flex-row gap-4 items-start">
         <FilterSidebar
           filters={filters}
           onChange={setFilters}
@@ -293,7 +334,7 @@ export default function CalendarPage() {
 
         <div className="relative flex-1 min-w-0 w-full">
           {loading && (
-            <div className="absolute inset-0 bg-slate-900/50 z-30 flex items-center justify-center animate-pulse text-blue-400">
+            <div className="absolute inset-0 bg-surface/75 z-30 flex items-center justify-center animate-pulse text-accent">
               Loading...
             </div>
           )}
@@ -306,10 +347,12 @@ export default function CalendarPage() {
               today={today}
               onEventClick={setSelectedEvent}
               onToggle={handleToggleCompletion}
+              onCreateTask={handleCreateTask}
               startHour={dayStartHour}
               endHour={dayEndHour}
               weekStartsOn={weekStartsOn}
               timeFormat={timeFormat}
+              compactEmptyHours={compactEmptyHours}
             />
           ) : (
             <CalendarMonthView

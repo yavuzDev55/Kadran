@@ -14,14 +14,17 @@ sense of time.
   - **Today / Next 7 days** — tabbed agenda
   - **High priority** and **Pinned** — at most five rows each, with a link to the filtered list
   - **Any time** — every task without a date or time, in a scrollable box with search and a full-list dialog
-- **Calendar** — week and month views; multi-day tasks are bars across the days, open-ended tasks and deadlines are small labels at their clock time; filters live in a left sidebar
-- **List view** — left filter sidebar (search, type, time type, priority, tags, date range, completed, pinned); a recurring series is one row that expands into its occurrences
+- **Calendar** — week and month views; multi-day tasks are bars across the days, open-ended tasks and deadlines are small labels at their clock time; filters live in a left sidebar. On narrow screens the week view becomes a selectable single-day view. Click an empty time slot to start a timed task with its date and time prefilled, or drag to select the duration. Empty hours can be compacted with a browser-local setting.
+- **Task list** — switch between list and responsive card-grid layouts; filter by search, type, time type, priority, tags, date range, completion, and pin state. Add or edit tags from the task editor; the list is read-only for tags. A recurring series expands into its occurrences
 - **Five time models** — see [Time models](#time-models)
 - **Task-type rules** — course, homework, exam and custom tasks each allow different time models, recurrence and defaults, see [Task types](#task-types)
 - **Recurring tasks** — daily, weekly (chosen weekdays, each with its own time), or monthly (a day of the month or the last day). The end date is required and at most one year after the start. Every occurrence is a real task with its own completion, edit and delete
 - **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinning a series pins every occurrence
 - **Tags** — added through a search box that suggests existing tags while you type; task colors come from a shared preset palette, and completability follows the task-type rules
+- **Task form** — live task preview, quick duration choices for timed tasks, and a clock-dial picker with native time entry retained
 - **User preferences** — week start, calendar hours, 12/24-hour clock, default view, hide completed, timezone
+- **Appearance** — light, dark, or system theme, avatar color, and per-task-type default colors; appearance choices are saved locally in the browser
+- **Session security** — saved sessions are checked against the backend before protected pages render; expired sessions are cleared and sent back to sign-in
 
 **Design note:** KADRAN intentionally does **not** detect or block schedule
 conflicts. Two tasks can occupy the same slot and the calendar renders both.

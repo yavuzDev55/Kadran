@@ -14,7 +14,7 @@ function SearchBox({ value, onChange }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Search any-time tasks..."
-      className="w-full p-1.5 text-sm rounded bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-blue-500"
+      className="ui-input text-sm"
     />
   );
 }
@@ -43,17 +43,17 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
   );
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col">
+    <section className="ui-panel p-4 flex flex-col">
       <div className="flex items-center justify-between mb-3 gap-2">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">
+        <h2 className="anytime-heading text-sm font-bold text-ink uppercase tracking-wider">
           Any time
-          {items.length > 0 && <span className="ml-2 text-slate-500 font-normal">({items.length})</span>}
+          {items.length > 0 && <span className="ml-2 text-muted font-normal">({items.length})</span>}
         </h2>
         {items.length > MODAL_THRESHOLD && (
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="text-xs font-semibold text-blue-400 hover:text-blue-300"
+            className="text-xs font-semibold text-link hover:text-accent"
           >
             Show all →
           </button>
@@ -61,9 +61,9 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
       </div>
 
       {error ? (
-        <p className="text-sm text-red-300 py-4 text-center">Could not load this list.</p>
+        <p className="text-sm text-danger py-4 text-center">Could not load this list.</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500 italic py-4 text-center">No any-time tasks.</p>
+        <p className="text-sm text-muted italic py-4 text-center">No any-time tasks.</p>
       ) : (
         <>
           {items.length > 3 && (
@@ -72,7 +72,7 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
             </div>
           )}
           {filtered.length === 0 ? (
-            <p className="text-sm text-slate-500 italic py-4 text-center">No match.</p>
+            <p className="text-sm text-muted italic py-4 text-center">No match.</p>
           ) : (
             renderList(filtered, "max-h-64")
           )}
@@ -84,13 +84,13 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
           className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && setOpen(false)}
         >
-          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col p-4 gap-3">
+          <div className="ui-panel w-full max-w-2xl max-h-[85vh] flex flex-col p-4 gap-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-100">Any-time tasks ({items.length})</h2>
+              <h2 className="text-lg font-bold text-ink">Any-time tasks ({items.length})</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-slate-400 hover:text-white px-2"
+                className="text-muted hover:text-ink px-2"
                 aria-label="Close"
               >
                 ✕
@@ -98,7 +98,7 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
             </div>
             <SearchBox value={query} onChange={setQuery} />
             {filtered.length === 0 ? (
-              <p className="text-sm text-slate-500 italic py-6 text-center">No match.</p>
+              <p className="text-sm text-muted italic py-6 text-center">No match.</p>
             ) : (
               renderList(filtered, "flex-1")
             )}

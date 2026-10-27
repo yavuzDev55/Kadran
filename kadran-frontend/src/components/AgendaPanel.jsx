@@ -27,15 +27,15 @@ export default function AgendaPanel({
   const isEmpty = tab === "today" ? todayItems.length === 0 : groups.length === 0;
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col max-h-[420px]">
-      <div className="flex gap-1 mb-3 bg-slate-950 p-1 rounded border border-slate-800 self-start">
+    <section className="ui-panel p-4 flex flex-col max-h-[420px]">
+      <div className="flex gap-1 mb-3 bg-surface-muted p-1 rounded border border-border/20 self-start">
         {tabs.map(({ id, label, count }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
             className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded transition ${
-              tab === id ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"
+              tab === id               ? "bg-surface text-ink border border-border/20" : "text-muted hover:text-ink"
             }`}
           >
             {label}
@@ -45,7 +45,7 @@ export default function AgendaPanel({
       </div>
 
       {isEmpty ? (
-        <p className="text-sm text-slate-500 italic py-4 text-center">
+        <p className="text-sm text-muted italic py-4 text-center">
           {tab === "today" ? "Nothing planned for today." : "Nothing planned for this period."}
         </p>
       ) : tab === "today" ? (
@@ -58,7 +58,7 @@ export default function AgendaPanel({
         <div className="flex flex-col gap-4 overflow-y-auto pr-1">
           {groups.map(({ date, items }) => (
             <div key={date}>
-              <h3 className="text-xs font-semibold text-slate-400 mb-1.5">{formatDayHeading(date, todayStr)}</h3>
+              <h3 className="text-xs font-semibold text-muted mb-1.5">{formatDayHeading(date, todayStr)}</h3>
               <ul className="flex flex-col gap-2">
                 {items.map((item) => (
                   <DashboardTaskItem key={item.id} item={item} {...itemProps} />

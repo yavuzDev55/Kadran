@@ -10,9 +10,11 @@ function ColorPicker({ value, onChange, typeDefault }) {
       <button
         type="button"
         onClick={() => onChange(null)}
+        aria-label="Use type default color"
+        aria-pressed={value === null}
         title="Use type default"
         className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs transition ${
-          value === null ? "border-white" : "border-slate-600 hover:border-slate-400"
+          value === null ? "border-ink" : "border-border/30 hover:border-ink"
         }`}
         style={{ backgroundColor: typeDefault }}
       >
@@ -23,9 +25,11 @@ function ColorPicker({ value, onChange, typeDefault }) {
           key={hex}
           type="button"
           onClick={() => onChange(hex)}
+          aria-label={`Set task color ${hex}`}
+          aria-pressed={value === hex}
           title={hex}
           className={`w-7 h-7 rounded-full border-2 transition ${
-            value === hex ? "border-white scale-110" : "border-transparent hover:border-slate-400"
+            value === hex ? "border-ink scale-110" : "border-transparent hover:border-ink"
           }`}
           style={{ backgroundColor: hex }}
         />
@@ -48,7 +52,7 @@ export default function TaskAppearanceFields({
       {!isOccurrence && (
         <>
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Task Color</label>
+            <label className="block text-sm text-muted mb-2">Task Color</label>
             <ColorPicker value={form.color} onChange={(color) => set({ color })} typeDefault={typeDefault} />
           </div>
 
@@ -59,12 +63,12 @@ export default function TaskAppearanceFields({
               checked={form.isCompletable}
               disabled={!completableEditable}
               onChange={(e) => set({ isCompletable: e.target.checked })}
-              className="w-4 h-4 accent-blue-600"
+              className="w-4 h-4 accent-accent"
             />
-            <label htmlFor="isCompletable" className="text-sm text-slate-300 cursor-pointer">
+            <label htmlFor="isCompletable" className="text-sm text-ink cursor-pointer">
               This task can be marked as complete
               {!completableEditable && (
-                <span className="text-slate-500"> (always on for {type.toLowerCase()})</span>
+                <span className="text-muted"> (always on for {type.toLowerCase()})</span>
               )}
             </label>
           </div>
@@ -77,9 +81,9 @@ export default function TaskAppearanceFields({
           id="isPinned"
           checked={form.isPinned}
           onChange={(e) => set({ isPinned: e.target.checked })}
-          className="w-4 h-4 accent-blue-600"
+          className="w-4 h-4 accent-accent"
         />
-        <label htmlFor="isPinned" className="text-sm text-slate-300 cursor-pointer">
+        <label htmlFor="isPinned" className="text-sm text-ink cursor-pointer">
           📌 Pin {isOccurrence || isSeriesEdit || form.recurring ? "the whole series" : "this task"} (listed in the
           dashboard&apos;s Pinned panel)
         </label>

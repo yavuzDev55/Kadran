@@ -5,13 +5,17 @@
 //   compact  one line inside a month cell
 
 import { formatEventTimeLabel, formatTime } from "../utils/formatTime";
+import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
 
 const PRIORITY_ICON = { LOW: "↓", MEDIUM: "•", HIGH: "↑" };
 
 export default function CalendarEventCard({ event, onClick, onToggle, timeFormat = "H24", variant = "block" }) {
-  const accentColor = event.effectiveColor || "#94a3b8";
+  const accentColor = getTaskDisplayColor(event);
   const done = event.isCompleted;
   const timeLabel = formatEventTimeLabel(event, timeFormat);
+  const taskClasses = `kadran-task type-${event.type.toLowerCase()} priority-${event.priority.toLowerCase()} ${
+    event.timeType === "DEADLINE" ? "is-deadline" : event.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
+  } ${done ? "is-completed" : ""}`;
 
   const handleToggle = (e) => {
     e.stopPropagation();
@@ -34,14 +38,16 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
     return (
       <div
         onClick={() => onClick && onClick(event)}
-        style={{ borderLeftColor: accentColor }}
-        className={`flex items-center gap-1 px-1 rounded border-l-2 bg-slate-800/90 cursor-pointer hover:brightness-125 transition ${
-          isCompact ? "text-[10px] py-0.5" : "h-full text-[11px]"
-        } ${done ? "opacity-40 grayscale" : ""}`}
+        style={{ "--task-color": accentColor }}
+        className={`${taskClasses} ${
+          isCompact
+            ? "flex items-center gap-1 px-1 rounded cursor-pointer hover:brightness-95 transition text-[10px] py-0.5"
+            : "kadran-task-marker flex h-full items-center gap-1 px-1 cursor-pointer hover:brightness-95 transition text-[11px]"
+        }`}
         title={`${timeLabel} ${event.title}`.trim()}
       >
         {checkbox(isCompact ? "w-2.5 h-2.5" : "w-3 h-3")}
-        <div className={`truncate ${done ? "line-through text-slate-400" : "text-slate-100"}`}>
+        <div className={`task-title truncate ${done ? "text-muted" : ""}`}>
           {timeLabel && <span className="opacity-70 mr-1">{timeLabel}</span>}
           {event.title}
         </div>
@@ -52,15 +58,13 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
   return (
     <div
       onClick={() => onClick && onClick(event)}
-      style={{ borderLeftColor: accentColor }}
-      className={`h-full w-full p-1.5 rounded border-l-4 cursor-pointer hover:brightness-110 shadow-sm flex flex-col overflow-hidden text-xs bg-slate-800/90 text-slate-100 ${
-        done ? "opacity-40 grayscale" : ""
-      }`}
+      style={{ "--task-color": accentColor }}
+      className={`${taskClasses} kadran-task-card h-full w-full p-1.5 rounded cursor-pointer hover:brightness-95 transition flex flex-col overflow-hidden text-xs`}
     >
       <div className="flex justify-between items-start">
         <div className="flex items-start gap-1.5 overflow-hidden">
           {checkbox("mt-0.5")}
-          <span className={`font-semibold truncate ${done ? "line-through text-slate-400" : ""}`}>{event.title}</span>
+          <span className="task-title font-semibold truncate">{event.title}</span>
         </div>
         <span className="shrink-0 text-[11px] font-bold opacity-70 ml-1">
           {PRIORITY_ICON[event.priority] || PRIORITY_ICON.MEDIUM}

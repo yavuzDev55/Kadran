@@ -12,24 +12,53 @@ import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import TaskAppearanceFields from "../components/task-form/TaskAppearanceFields";
 import TaskDetailsFields from "../components/task-form/TaskDetailsFields";
+import TaskOccurrenceFields from "../components/task-form/TaskOccurrenceFields";
 import TaskRecurrenceFields from "../components/task-form/TaskRecurrenceFields";
+import TaskSeriesNotice from "../components/task-form/TaskSeriesNotice";
 import TaskTimeFields from "../components/task-form/TaskTimeFields";
 import TaskTypeSelector from "../components/task-form/TaskTypeSelector";
-import { addYears, getTodayInTimezone, sliceDate, WEEKDAYS } from "../utils/dateUtils";
+import Button from "../components/ui/Button";
+import { addYears, formatDate, getTodayInTimezone, parseDate, sliceDate, WEEKDAYS } from "../utils/dateUtils";
+import { formatTaskTime } from "../utils/formatTime";
+import { getTaskTypeDisplayColor } from "../utils/taskDisplaySettings";
 import {
   MAX_SERIES_YEARS,
   TASK_RULES,
   TASK_TYPES,
-  TIME_TYPE_LABELS,
-  TYPE_COLORS,
   canRecur,
 } from "../utils/taskRules";
 
 const DEFAULT_DEADLINE_TIME = "23:59";
-const PATTERN_LABELS = { DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly" };
+const isValidDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+  return formatDate(parseDate(value)) === value;
+};
+const isValidTime = (value) => {
+  if (!/^\d{2}:\d{2}$/.test(value || "")) return false;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours < 24 && minutes < 60;
+};
 
-const inputClass =
-  "w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60";
+const createInitialForm = (today, searchParams) => {
+  const date = searchParams.get("date");
+  const startTime = searchParams.get("startTime");
+  const endTime = searchParams.get("endTime");
+  const initial = emptyForm("COURSE", isValidDate(date) ? date : today);
+  if (!isValidTime(startTime)) return initial;
+
+  const startMinutes = startTime.split(":").reduce((total, part) => total * 60 + Number(part), 0);
+  const suggestedEnd = Math.min(startMinutes + 60, 23 * 60 + 59);
+  const parsedEnd = isValidTime(endTime)
+    ? endTime.split(":").reduce((total, part) => total * 60 + Number(part), 0)
+    : null;
+  const endMinutes = parsedEnd !== null && parsedEnd > startMinutes ? parsedEnd : suggestedEnd;
+  return {
+    ...initial,
+    startTime,
+    endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
+  };
+};
+
 const emptyForm = (type, today) => {
   const rule = TASK_RULES[type];
   return {
@@ -79,7 +108,7 @@ export default function TaskCreatePage() {
   const today = useMemo(() => getTodayInTimezone(timeZone), [timeZone]);
 
   const [mode, setMode] = useState(id ? "loading" : "create");
-  const [form, setForm] = useState(() => emptyForm("COURSE", getTodayInTimezone(timeZone)));
+  const [form, setForm] = useState(() => createInitialForm(today, searchParams));
   const [existingTags, setExistingTags] = useState([]); // tags already on the series (edit-series)
   const [loaded, setLoaded] = useState(null); // the task as loaded, to send only real changes
   const [seriesInfo, setSeriesInfo] = useState(null);
@@ -337,7 +366,7 @@ export default function TaskCreatePage() {
   };
 
   if (mode === "loading") {
-    return <div className="flex items-center justify-center h-64 text-slate-400">Loading task...</div>;
+    return <div className="flex items-center justify-center h-64 text-muted">Loading task...</div>;
   }
 
   const isOccurrence = mode === "edit-occurrence";
@@ -358,35 +387,26 @@ export default function TaskCreatePage() {
         ? "Create Recurring Tasks"
         : `Create ${TASK_TYPES.find((t) => t.id === form.type)?.label} Task`
       : "Save Changes";
+  const previewTime = form.timeType === "MULTI_DAY"
+    ? `${form.rangeStartDate || "Start day"} → ${form.rangeEndDate || "End day"}`
+    : formatTaskTime(form) || "Time not set";
+  const previewType = TASK_TYPES.find((type) => type.id === form.type);
+  const previewTimeType = form.timeType.replace(/_/g, " ").toLowerCase();
+  const previewSchedule = form.recurring
+    ? `Repeats ${form.pattern.toLowerCase()}${form.recStart ? ` from ${form.recStart}` : ""}${form.recEnd ? ` to ${form.recEnd}` : ""}`
+    : previewTime;
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 p-4 mb-20">
+    <div className="max-w-5xl mx-auto mt-8 p-4 mb-20">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">{heading}</h1>
-        <Link to={isEdit ? "/tasks" : "/"} className="text-sm text-slate-400 hover:text-white transition">
+        <h1 className="font-title text-3xl text-ink">{heading}</h1>
+        <Link to={isEdit ? "/tasks" : "/"} className="text-sm text-muted hover:text-ink transition">
           &larr; Back
         </Link>
       </div>
 
       {seriesInfo && (isOccurrence || isSeriesEdit) && (
-        <div className="mb-4 p-3 rounded border border-purple-900 bg-purple-950/40 text-sm text-purple-200 flex flex-wrap items-center justify-between gap-2">
-          <span>
-            🔁 Part of a {PATTERN_LABELS[seriesInfo.pattern].toLowerCase()} series ({seriesInfo.taskCount} tasks,{" "}
-            {seriesInfo.startDate} → {seriesInfo.endDate}).{" "}
-            {isOccurrence
-              ? "The day, time and note of this occurrence can be changed."
-              : "Changes apply to every occurrence. Type, time and repeat rule cannot be changed."}
-          </span>
-          {isOccurrence ? (
-            <Link to={`/tasks/edit/${id}?scope=series`} className="text-purple-300 underline hover:text-white">
-              Edit whole series
-            </Link>
-          ) : (
-            <Link to={`/tasks/edit/${id}`} className="text-purple-300 underline hover:text-white">
-              Edit this occurrence
-            </Link>
-          )}
-        </div>
+        <TaskSeriesNotice seriesInfo={seriesInfo} taskId={id} isOccurrence={isOccurrence} />
       )}
 
       <TaskTypeSelector
@@ -395,83 +415,104 @@ export default function TaskCreatePage() {
         onChange={handleTypeChange}
       />
 
-      <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-xl">
-        {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 text-red-200 rounded text-sm whitespace-pre-wrap">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Shared fields (not editable per occurrence) */}
-          {!isOccurrence && (
-            <TaskDetailsFields
-              form={form}
-              set={set}
-              isSeriesEdit={isSeriesEdit}
-              allowedTimeTypes={allowedTimeTypes}
-              onTimeTypeChange={handleTimeTypeChange}
-            />
-          )}
-
-          {/* Occurrence summary */}
-          {isOccurrence && (
-            <>
-              <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-sm text-slate-300">
-                <p className="font-semibold text-slate-100">{form.title}</p>
-                <p className="text-xs text-slate-400 mt-1">{TIME_TYPE_LABELS[form.timeType]}</p>
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">This occurrence&apos;s note</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => set({ description: e.target.value })}
-                  placeholder="Note something specific about this class..."
-                  rows="3"
-                  className={inputClass}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Single-day / range time fields */}
-          {!isSeriesEdit && !form.recurring && (
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-slate-300">When</h3>
-              <TaskTimeFields timeType={form.timeType} form={form} set={set} />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)] gap-5 items-start">
+        <section className="ui-panel p-4 md:p-6">
+          {error && (
+            <div className="mb-4 p-3 bg-danger/10 border border-danger/40 text-danger rounded text-sm whitespace-pre-wrap">
+              {error}
             </div>
           )}
 
-          {/* Recurrence (creation only) */}
-          {showRecurrence && (
-            <TaskRecurrenceFields
-              form={form}
-              set={set}
-              recurrenceMax={recurrenceMax}
-              onToggleWeekDay={toggleWeekDay}
-              onSetSlot={setSlot}
-            />
-          )}
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {!isOccurrence && (
+                <TaskDetailsFields
+                  form={form}
+                  set={set}
+                  isSeriesEdit={isSeriesEdit}
+                  allowedTimeTypes={allowedTimeTypes}
+                  onTimeTypeChange={handleTimeTypeChange}
+                />
+              )}
 
-          {/* Appearance and flags (not for a single occurrence) */}
-          <TaskAppearanceFields
-            form={form}
-            set={set}
-            typeDefault={TYPE_COLORS[form.type]}
-            type={form.type}
-            completableEditable={rule.completable.editable}
-            isOccurrence={isOccurrence}
-            isSeriesEdit={isSeriesEdit}
-          />
+              {isOccurrence && <TaskOccurrenceFields form={form} set={set} />}
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded transition disabled:bg-blue-800"
+              {!isSeriesEdit && !form.recurring && (
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-ink">When</h3>
+                  <TaskTimeFields timeType={form.timeType} form={form} set={set} />
+                </div>
+              )}
+
+              {showRecurrence && (
+                <TaskRecurrenceFields
+                  form={form}
+                  set={set}
+                  recurrenceMax={recurrenceMax}
+                  onToggleWeekDay={toggleWeekDay}
+                  onSetSlot={setSlot}
+                />
+              )}
+
+              <TaskAppearanceFields
+                form={form}
+                set={set}
+                typeDefault={getTaskTypeDisplayColor(form.type)}
+                type={form.type}
+                completableEditable={rule.completable.editable}
+                isOccurrence={isOccurrence}
+                isSeriesEdit={isSeriesEdit}
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                disabled={saving}
+                className="mt-4 w-full"
+              >
+                {submitLabel}
+              </Button>
+          </form>
+        </section>
+
+        <aside className="ui-panel p-4 lg:sticky lg:top-20" aria-live="polite">
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Live preview</p>
+            <h2 className="font-title text-xl text-ink mt-1">On your calendar</h2>
+          </div>
+          <div
+            className={`kadran-task kadran-task-row kadran-task-card type-${form.type.toLowerCase()} priority-${form.priority.toLowerCase()} ${
+              form.timeType === "DEADLINE" ? "is-deadline" : form.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
+            } rounded-lg p-4 pl-10`}
+            style={{ "--task-color": form.color || getTaskTypeDisplayColor(form.type) }}
           >
-            {submitLabel}
-          </button>
-        </form>
+            <div className="flex items-start justify-between gap-3">
+              <p className="task-title font-semibold break-words">{form.title.trim() || "Your task title"}</p>
+              {form.isPinned && <span aria-label="Pinned" title="Pinned">📌</span>}
+            </div>
+            <p className={`mt-2 text-sm text-muted ${form.timeType === "ANY_TIME" ? "anytime-heading" : ""}`}>
+              {previewSchedule}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="rounded-full border border-border/20 px-2 py-1">{previewType?.label}</span>
+              <span className="rounded-full border border-border/20 px-2 py-1 capitalize">{previewTimeType}</span>
+              {form.priority === "HIGH" && <span className="text-danger font-semibold">High priority</span>}
+            </div>
+            {form.description.trim() && (
+              <p className="mt-3 text-sm text-muted break-words">{form.description}</p>
+            )}
+            {form.tags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {form.tags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-surface-muted px-2 py-1 text-[11px] text-muted">{tag}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          {form.timeType === "ANY_TIME" && (
+            <p className="mt-3 text-xs text-muted">Any-time tasks stay in the dashboard list and do not appear in the calendar.</p>
+          )}
+        </aside>
       </div>
     </div>
   );

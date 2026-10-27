@@ -1,12 +1,13 @@
-const smallInputClass =
-  "w-full p-2 rounded bg-slate-900 border border-slate-600 text-slate-100 text-sm focus:outline-none focus:border-blue-500";
+import ClockTimeInput from "./ClockTimeInput";
+
+const smallInputClass = "ui-input text-sm";
 
 function Field({ label, children, hint }) {
   return (
     <div>
-      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      <label className="block text-xs text-muted mb-1">{label}</label>
       {children}
-      {hint && <p className="text-[11px] text-slate-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-muted mt-1">{hint}</p>}
     </div>
   );
 }
@@ -38,7 +39,7 @@ export default function TaskTimeFields({ timeType, form, set }) {
             />
           </Field>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-muted">
           {sameDay
             ? "Same start and end day: a one-day task, shown as an all-day item on the calendar."
             : "Whole days only. Shown as a bar across the days on the calendar."}
@@ -49,11 +50,27 @@ export default function TaskTimeFields({ timeType, form, set }) {
 
   if (timeType === "ANY_TIME") {
     return (
-      <div className="p-3 bg-slate-900/50 rounded border border-slate-700/50 text-xs text-slate-400">
+      <div className="p-3 bg-surface-muted rounded border border-border/20 text-xs text-muted">
         No date or time. This task is listed under "Any time" on the dashboard and never appears on the calendar.
       </div>
     );
   }
+
+  const startMinutes = form.startTime
+    ? form.startTime.split(":").reduce((total, part) => total * 60 + Number(part), 0)
+    : null;
+  const currentDuration = startMinutes !== null && form.endTime
+    ? form.endTime.split(":").reduce((total, part) => total * 60 + Number(part), 0) - startMinutes
+    : null;
+  const durationOptions = [30, 45, 60, 90, 120].filter(
+    (minutes) => startMinutes !== null && startMinutes + minutes <= 23 * 60 + 59,
+  );
+  const setDuration = (minutes) => {
+    const endMinutes = startMinutes + minutes;
+    set({
+      endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
+    });
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -68,33 +85,51 @@ export default function TaskTimeFields({ timeType, form, set }) {
       </Field>
       {(timeType === "TIMED" || timeType === "OPEN_ENDED") && (
         <Field label="Start time *">
-          <input
-            type="time"
+          <ClockTimeInput
+            label="Start time"
             value={form.startTime}
-            onChange={(e) => set({ startTime: e.target.value })}
-            className={smallInputClass}
+            onChange={(startTime) => set({ startTime })}
             required
           />
         </Field>
       )}
       {timeType === "TIMED" && (
         <Field label="End time *">
-          <input
-            type="time"
-            value={form.endTime}
-            onChange={(e) => set({ endTime: e.target.value })}
-            className={smallInputClass}
-            required
-          />
+          <>
+            <ClockTimeInput
+              label="End time"
+              value={form.endTime}
+              onChange={(endTime) => set({ endTime })}
+              required
+            />
+            {durationOptions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2" aria-label="Task duration">
+                {durationOptions.map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    aria-pressed={currentDuration === minutes}
+                    onClick={() => setDuration(minutes)}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+                      currentDuration === minutes
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border/20 text-muted hover:border-accent/50 hover:text-ink"
+                    }`}
+                  >
+                    {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         </Field>
       )}
       {timeType === "DEADLINE" && (
         <Field label="Due time" hint="Defaults to 23:59.">
-          <input
-            type="time"
+          <ClockTimeInput
+            label="Due time"
             value={form.endTime}
-            onChange={(e) => set({ endTime: e.target.value })}
-            className={smallInputClass}
+            onChange={(endTime) => set({ endTime })}
           />
         </Field>
       )}

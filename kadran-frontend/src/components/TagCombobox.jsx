@@ -97,14 +97,14 @@ export default function TagCombobox({
           {selectedTags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-blue-400 text-xs rounded border border-slate-600"
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-muted text-link text-xs rounded border border-border/20"
             >
               #{tag}
               {onRemove && !disabled && (
                 <button
                   type="button"
                   onClick={() => onRemove(tag)}
-                  className="text-slate-500 hover:text-red-400 leading-none"
+                  className="text-muted hover:text-danger leading-none"
                   aria-label={`Remove tag ${tag}`}
                 >
                   ×
@@ -127,12 +127,12 @@ export default function TagCombobox({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        className="w-full p-2 text-sm rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60"
+        className="ui-input text-sm disabled:opacity-60"
         autoComplete="off"
       />
 
       {open && options.length > 0 && (
-        <ul className="absolute z-40 mt-1 w-full max-h-56 overflow-y-auto bg-slate-800 border border-slate-600 rounded shadow-xl">
+        <ul className="absolute z-40 mt-1 w-full max-h-56 overflow-y-auto bg-surface border border-border/25 rounded shadow-xl">
           {options.map((option, index) => (
             <li key={option.key}>
               <button
@@ -140,7 +140,7 @@ export default function TagCombobox({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(option.name)}
                 className={`w-full text-left px-3 py-1.5 text-sm transition ${
-                  index === highlight ? "bg-blue-600 text-white" : "text-slate-200 hover:bg-slate-700"
+                  index === highlight ? "bg-accent text-accent-ink" : "text-ink hover:bg-surface-muted"
                 }`}
               >
                 {option.create ? (

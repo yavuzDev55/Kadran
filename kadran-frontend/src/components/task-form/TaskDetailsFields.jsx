@@ -1,8 +1,7 @@
 import TagCombobox from "../TagCombobox";
 import { TIME_TYPE_LABELS } from "../../utils/taskRules";
 
-const inputClass =
-  "w-full p-2.5 rounded bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-blue-500 disabled:opacity-60";
+const inputClass = "ui-input disabled:opacity-60";
 
 export default function TaskDetailsFields({
   form,
@@ -14,7 +13,7 @@ export default function TaskDetailsFields({
   return (
     <>
       <div>
-        <label className="block text-sm text-slate-400 mb-1">Task Title *</label>
+        <label className="block text-sm text-muted mb-1">Task Title *</label>
         <input
           type="text"
           value={form.title}
@@ -26,7 +25,7 @@ export default function TaskDetailsFields({
       </div>
 
       <div>
-        <label className="block text-sm text-slate-400 mb-1">
+        <label className="block text-sm text-muted mb-1">
           {isSeriesEdit ? "Series description" : "Description"}
         </label>
         <textarea
@@ -39,7 +38,7 @@ export default function TaskDetailsFields({
       </div>
 
       <div>
-        <label className="block text-sm text-slate-400 mb-1">Tags</label>
+        <label className="block text-sm text-muted mb-1">Tags</label>
         <TagCombobox
           selectedTags={form.tags}
           onAdd={(tag) => set({ tags: [...form.tags, tag] })}
@@ -47,13 +46,13 @@ export default function TaskDetailsFields({
           placeholder="Search or add a tag..."
         />
         {isSeriesEdit && (
-          <p className="text-[11px] text-slate-500 mt-1">Tags can be added to a series, not removed.</p>
+          <p className="text-[11px] text-muted mt-1">Tags can be added to a series, not removed.</p>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm text-slate-400 mb-1">Priority</label>
+          <label className="block text-sm text-muted mb-1">Priority</label>
           <select
             value={form.priority}
             onChange={(e) => set({ priority: e.target.value })}
@@ -67,7 +66,7 @@ export default function TaskDetailsFields({
 
         {!isSeriesEdit && allowedTimeTypes.length > 1 && (
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Time Type</label>
+            <label className="block text-sm text-muted mb-1">Time Type</label>
             <select
               value={form.timeType}
               onChange={(e) => onTimeTypeChange(e.target.value)}

@@ -14,7 +14,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -22,11 +21,10 @@ api.interceptors.response.use(
       error.config?.url?.includes('/auth/login') || 
       error.config?.url?.includes('/auth/register');
 
-    // Only redirect if it's a 401 and NOT an authentication route
     if (error.response?.status === 401 && !isAuthRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      window.dispatchEvent(new Event('kadran-unauthorized'));
     }
     
     return Promise.reject(error);

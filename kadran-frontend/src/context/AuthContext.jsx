@@ -1,6 +1,6 @@
 // src/context/AuthContext.jsx
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import api from "../services/api";
 
 const AuthContext = createContext();
@@ -15,12 +15,85 @@ const readStoredUser = () => {
 };
 
 export function AuthProvider({ children }) {
-  // The session is restored synchronously from localStorage, so there is no loading phase
   const [user, setUser] = useState(readStoredUser);
   const [token, setToken] = useState(() => localStorage.getItem("token") || null);
-  const loading = false;
+  const initialToken = useRef(token);
+  const initialVerification = useRef(null);
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem("token")));
+  const [authError, setAuthError] = useState("");
+
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+    setAuthError("");
+    setLoading(false);
+  }, []);
+
+  const verifySession = useCallback(async () => {
+    if (!token) {
+      setLoading(false);
+      setUser(null);
+      return;
+    }
+
+    setLoading(true);
+    setAuthError("");
+    try {
+      const response = await api.get("/auth/me");
+      const verifiedUser = response.data.data;
+      localStorage.setItem("user", JSON.stringify(verifiedUser));
+      setUser(verifiedUser);
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 404) {
+        logout();
+      } else {
+        setAuthError("We couldn't verify your saved session. Check your connection and try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [logout, token]);
+
+  useEffect(() => {
+    if (!initialToken.current) return undefined;
+    let active = true;
+    const controller = new AbortController();
+    initialVerification.current = controller;
+
+    const verifyInitialSession = async () => {
+      try {
+        const response = await api.get("/auth/me", { signal: controller.signal });
+        if (!active) return;
+        const verifiedUser = response.data.data;
+        localStorage.setItem("user", JSON.stringify(verifiedUser));
+        setUser(verifiedUser);
+      } catch (error) {
+        if (!active || error.code === "ERR_CANCELED") return;
+        if (error.response?.status === 401 || error.response?.status === 404) logout();
+        else setAuthError("We couldn't verify your saved session. Check your connection and try again.");
+      } finally {
+        if (active && !controller.signal.aborted) setLoading(false);
+      }
+    };
+
+    verifyInitialSession();
+    return () => {
+      active = false;
+      controller.abort();
+      if (initialVerification.current === controller) initialVerification.current = null;
+    };
+  }, [logout]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => logout();
+    window.addEventListener("kadran-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("kadran-unauthorized", handleUnauthorized);
+  }, [logout]);
 
   const login = async (email, password) => {
+    initialVerification.current?.abort();
     const response = await api.post("/auth/login", { email, password });
     // Response format: { success, data: { user, token } }
     const { user, token } = response.data.data;
@@ -29,13 +102,8 @@ export function AuthProvider({ children }) {
     localStorage.setItem("user", JSON.stringify(user));
     setToken(token);
     setUser(user);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setToken(null);
-    setUser(null);
+    setAuthError("");
+    setLoading(false);
   };
 
   // Updates user in both state and localStorage after a settings save
@@ -46,7 +114,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, updateUser }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, authError, verifySession, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

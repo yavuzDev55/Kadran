@@ -4,6 +4,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import api from "../services/api";
+import AuthShell from "../components/AuthShell";
+import Button from "../components/ui/Button";
+import Field from "../components/ui/Field";
+import { getAuthErrorMessage } from "../utils/authErrorMessage";
 
 // Map backend validation rules directly to Zod schema
 const registerSchema = z.object({
@@ -43,53 +47,49 @@ export default function RegisterPage() {
       // Redirect to login page after successful registration
       navigate("/login");
     } catch (err) {
-      setServerError(err.response?.data?.error?.message || "Registration failed");
+      setServerError(getAuthErrorMessage(err, "Registration failed."));
     }
   };
 
   return (
-    <div className="max-w-sm mx-auto mt-10">
-      <h1 className="text-2xl font-bold mb-4">Register</h1>
-      
+    <AuthShell
+      title="Make time for what matters"
+      lead="Create an account to organize courses, deadlines and your week."
+      alternateLabel="Already have an account?"
+      alternateTo="/login"
+      alternateAction="Sign in"
+    >
       {serverError && (
-        <div className="mb-4 text-red-500 border border-red-500 p-2">
+        <div className="mb-5 rounded-md border border-danger/40 bg-danger/5 px-3 py-2.5 text-sm text-danger" role="alert">
           {serverError}
         </div>
       )}
-
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-        <div>
-          <label className="block mb-1">Email</label>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+        <Field label="Email" error={errors.email?.message}>
           <input
             type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            className="ui-field__control"
             {...register("email")}
-            className="w-full p-2 text-black"
           />
-          {errors.email && (
-            <span className="text-red-500 text-sm block mt-1">{errors.email.message}</span>
-          )}
-        </div>
-
-        <div>
-          <label className="block mb-1">Password</label>
+        </Field>
+        <Field
+          label="Password"
+          hint="At least 8 characters, including an uppercase letter and a number."
+          error={errors.password?.message}
+        >
           <input
             type="password"
+            autoComplete="new-password"
+            className="ui-field__control"
             {...register("password")}
-            className="w-full p-2 text-black"
           />
-          {errors.password && (
-            <span className="text-red-500 text-sm block mt-1">{errors.password.message}</span>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="p-2 bg-green-600 hover:bg-green-700 text-white font-bold mt-2 disabled:bg-green-800"
-        >
-          {isSubmitting ? "Creating Account..." : "Sign Up"}
-        </button>
+        </Field>
+        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" disabled={isSubmitting}>
+          {isSubmitting ? "Creating account..." : "Create Account"}
+        </Button>
       </form>
-    </div>
+    </AuthShell>
   );
 }

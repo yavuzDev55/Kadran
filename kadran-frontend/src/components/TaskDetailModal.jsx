@@ -48,60 +48,60 @@ export default function TaskDetailModal({
   const showTimeSeparately = task.timeType !== "MULTI_DAY" && task.timeType !== "ANY_TIME" && timeText;
 
   const actionClass =
-    "px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition rounded border border-slate-700";
+    "px-3 py-2 text-sm font-medium text-ink hover:bg-surface-muted transition rounded border border-border/25";
   const dangerClass =
-    "px-3 py-2 text-sm font-medium text-red-400 hover:text-white hover:bg-red-600 transition rounded border border-red-900/50";
+    "px-3 py-2 text-sm font-medium text-danger hover:bg-danger/10 transition rounded border border-danger/30";
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
-        <div className="flex justify-between items-start p-4 border-b border-slate-700/50">
+      <div className="ui-panel w-full max-w-md flex flex-col">
+        <div className="flex justify-between items-start p-4 border-b border-border/20">
           <div className="flex items-start gap-3">
             {event.isCompletable !== false && (
               <input
                 type="checkbox"
                 checked={event.isCompleted || false}
                 onChange={() => onToggle(event)}
-                className="mt-1 w-4 h-4 cursor-pointer accent-green-500"
+                className="mt-1 w-4 h-4 cursor-pointer accent-[rgb(var(--color-accent))]"
                 title="Mark as completed"
               />
             )}
             <div>
               <h2
-                className={`text-xl font-bold ${event.isCompleted ? "line-through text-slate-400" : "text-slate-100"}`}
+                className={`font-title text-xl font-normal ${event.isCompleted ? "line-through text-muted" : "text-ink"}`}
               >
                 {event.title}
               </h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-surface-muted text-ink">
                   {typeLabel(event.type)}
                 </span>
                 <span
                   className={`text-xs font-semibold px-2 py-0.5 rounded ${
                     event.priority === "HIGH"
-                      ? "bg-red-900/50 text-red-300"
+                      ? "text-danger bg-danger/10"
                       : event.priority === "MEDIUM"
-                        ? "bg-yellow-900/50 text-yellow-300"
-                        : "bg-slate-700 text-slate-300"
+                        ? "text-accent bg-accent/10"
+                        : "bg-surface-muted text-muted"
                   }`}
                 >
                   {PRIORITY_LABELS[event.priority]}
                 </span>
                 {event.isCompleted && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-green-900/50 text-green-300">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-accent/10 text-accent">
                     ✓ Completed
                   </span>
                 )}
                 {event.isPinned && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-900/50 text-blue-300">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-accent/10 text-accent">
                     📌 Pinned
                   </span>
                 )}
                 {event.isCompletable === false && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-900 text-slate-500 border border-slate-700">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-surface-muted text-muted border border-border/20">
                     Not completable
                   </span>
                 )}
@@ -110,7 +110,7 @@ export default function TaskDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition p-1 bg-slate-700/50 hover:bg-slate-600 rounded shrink-0"
+            className="text-muted hover:text-ink transition p-1 bg-surface-muted hover:bg-surface rounded shrink-0"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,14 +119,14 @@ export default function TaskDetailModal({
           </button>
         </div>
 
-        <div className="p-4 flex flex-col gap-4 text-sm text-slate-300">
+        <div className="p-4 flex flex-col gap-4 text-sm text-ink">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+            <span className="text-xs text-muted font-semibold uppercase tracking-wider">
               {isSeries ? "This occurrence" : "Date & time"}
             </span>
-            <div className="flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+            <div className="flex items-center gap-2 bg-surface-muted/60 p-2 rounded border border-border/20">
               {dateText && <span>{dateText}</span>}
-              {dateText && showTimeSeparately && <span className="text-slate-500">•</span>}
+              {dateText && showTimeSeparately && <span className="text-muted">•</span>}
               {showTimeSeparately && <span>{timeText}</span>}
               {task.timeType === "ANY_TIME" && <span>Any time</span>}
             </div>
@@ -134,10 +134,10 @@ export default function TaskDetailModal({
 
           {task.description && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+              <span className="text-xs text-muted font-semibold uppercase tracking-wider">
                 {isSeries ? "This occurrence's note" : "Description"}
               </span>
-              <p className="bg-slate-900/50 p-2 rounded border border-slate-700/50 whitespace-pre-wrap">
+              <p className="bg-surface-muted/60 p-2 rounded border border-border/20 whitespace-pre-wrap">
                 {task.description}
               </p>
             </div>
@@ -145,8 +145,8 @@ export default function TaskDetailModal({
 
           {isSeries && series?.description && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Series description</span>
-              <p className="bg-slate-900/50 p-2 rounded border border-slate-700/50 whitespace-pre-wrap">
+              <span className="text-xs text-muted font-semibold uppercase tracking-wider">Series description</span>
+              <p className="bg-surface-muted/60 p-2 rounded border border-border/20 whitespace-pre-wrap">
                 {series.description}
               </p>
             </div>
@@ -154,10 +154,10 @@ export default function TaskDetailModal({
 
           {event.tags && event.tags.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Tags</span>
+              <span className="text-xs text-muted font-semibold uppercase tracking-wider">Tags</span>
               <div className="flex flex-wrap gap-1.5">
                 {event.tags.map((tag) => (
-                  <span key={tag} className="text-xs px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-300">
+                  <span key={tag} className="text-xs px-2 py-1 bg-surface-muted border border-border/20 rounded text-ink">
                     #{tag}
                   </span>
                 ))}
@@ -166,7 +166,7 @@ export default function TaskDetailModal({
           )}
 
           {isSeries && (
-            <div className="text-xs text-slate-500 bg-slate-900/50 p-2 rounded border border-slate-700/50 flex flex-col gap-1">
+            <div className="text-xs text-muted bg-surface-muted/60 p-2 rounded border border-border/20 flex flex-col gap-1">
               <span>
                 🔁 {PATTERN_LABELS[series?.pattern] || "Recurring"} series
                 {series ? ` (${sliceDate(series.startDate)} → ${sliceDate(series.endDate)})` : ""}
@@ -179,15 +179,15 @@ export default function TaskDetailModal({
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-700/50 bg-slate-900/30 flex flex-col gap-3">
+        <div className="p-4 border-t border-border/20 bg-surface-muted/30 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {event.isCompletable !== false ? (
               <button
                 onClick={() => onToggle(event)}
                 className={`px-4 py-2 text-sm font-medium rounded border transition ${
                   event.isCompleted
-                    ? "text-slate-300 border-slate-600 hover:bg-slate-700"
-                    : "text-green-400 border-green-900/50 hover:bg-green-700 hover:text-white"
+                    ? "text-ink border-border/25 hover:bg-surface"
+                    : "text-accent border-accent/40 hover:bg-accent/10"
                 }`}
               >
                 {event.isCompleted ? "Mark Incomplete" : "Mark Complete"}

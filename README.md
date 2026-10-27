@@ -166,9 +166,14 @@ The design system is defined with CSS variables in
 while running the Vite development server and can preview both themes.
 
 The optional user profile fields are added by the
-`20261027004500_user_profile` migration. Apply migrations only against the
-intended development database before running the updated backend; do not reset
-a database containing user data.
+`20261027004500_user_profile` migration. The configured Neon database reported
+`Database schema is up to date!` on 2026-10-27. Check migration status before
+any future schema update; never reset a database containing user data.
+
+For current implementation status, remaining work, and verification commands,
+see [TODO.md](./TODO.md). The original visual prototype is retained as a
+read-only archive in [Design Tools](./Design%20Tools/README.md); its original
+implementation prompt and known-gap notes are historical, not current status.
 
 ---
 

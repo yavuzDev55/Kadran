@@ -1,53 +1,112 @@
-# KADRAN — AI Handoff and Remaining Work
+# KADRAN — AI Implementation Handoff
 
-This is the current implementation handoff for a developer or coding agent.
-Use it instead of inferring project status from the original design package.
+## Mission
 
-## Current status
+Continue implementation of the KADRAN redesign. Do not stop at summarizing the
+repository or checking the login issue. Audit the existing app against the
+original design reference and the complete roadmap PDF, implement every
+applicable requirement that is still missing, validate it, and keep this file
+updated.
 
-- Latest implementation commit: `78760be` (`feat: complete Kadran design and auth updates`).
-- The design implementation and the user-reported UI fixes are complete.
-- Neon connectivity was verified. `npx prisma migrate status` reported
-  `Database schema is up to date!`; do not run a migration or reset the database
-  unless a new schema change is explicitly requested.
-- Frontend lint/build and all 48 backend tests passed after the UI/auth fixes.
-- Build still reports a non-blocking JavaScript chunk over 500 KB.
-- No real account credentials were used or saved during verification.
+## Copy/paste task for the next AI
 
-## Remaining work
+> KADRAN projesinde tasarım ve yol haritası uygulamasını devral ve gerçekten
+> tamamla. Sadece analiz/plan/rapor verip durma; eksikleri kodda uygula,
+> doğrula ve bu dosyadaki ilerlemeyi güncelle.
+>
+> ### Önce okunacak kaynaklar
+> 1. Proje kökündeki `README.md`, `TODO.md` ve varsa `AGENTS.md`/agent
+>    yönergeleri.
+> 2. `Design Tools/KADRAN Yol Haritası Yeniden Tasarım ve Yeni Özellikler.pdf`
+>    dosyasının tamamı. Her gereksinimi tek tek çıkar; başlıkları veya yalnızca
+>    ilk sayfaları okuyup varsayım yapma.
+> 3. Tasarım karşılaştırması için `Design Tools/design-reference.html`,
+>    `Design Tools/src/styles.css`, `Design Tools/src/body.html` ve
+>    `Design Tools/src/app.js`.
+> 4. İlgili mevcut React sayfaları/bileşenleri, frontend yardımcıları,
+>    backend API/service/validator/Prisma katmanı ve mevcut testler.
+>
+> ### Nasıl ilerle
+> - PDF’deki her maddeyi gerçek kodla karşılaştır. Bu dosyada “tamamlandı”
+>   yazması tek başına kanıt değildir; doğrudan kodu/testi/ekranı kontrol et.
+> - PDF ve tasarım referansını kaynak gereksinim olarak al, fakat prototipteki
+>   sahte veri ve eski API alan adlarını gerçek backend sözleşmesi sanma.
+>   Mevcut KADRAN veri modeli ve API’si yetkilidir.
+> - Eksik/görsel olarak yarım kalan maddeleri mevcut React/Vite ve
+>   Express/Prisma yapısını koruyarak uygula. Dashboard, Calendar, Tasks,
+>   create/edit form, Settings ve Login/Register dahil tüm kapsamı denetle;
+>   çizimler, dokular, butonlar, switch’ler, hizalama ve dar ekranları da
+>   karşılaştır.
+> - Özelliklerin bütün ilgili yüzeylerde tutarlı olduğundan emin ol. Backend
+>   gerektiren bir yol haritası maddesi varsa router/validator/controller/
+>   service/database/test katmanlarını izleyip frontend’e bağla.
+> - İlişkili eksikleri toplu biçimde tamamla; küçük değişikliklerde durup
+>   kullanıcıdan devam izni isteme. Gerçekten bloklayan karar veya veri tabanı
+>   değişikliği gerekiyorsa önce sor.
+> - Hiçbir zaman parola, token veya gizli `.env` değerini isteme/gösterme/commit
+>   etme. `Design Tools/` içindeki orijinal kaynakları silme veya değiştirme;
+>   bunlar salt-okunur referanstır.
+> - Veritabanını resetleme. Migration gerekiyorsa önce hedef Neon branch’ini ve
+>   migration planını açıkça bildirip kullanıcı onayı al; onaysız migration
+>   çalıştırma.
+> - Tüm PDF gereksinimleri için bu dosyada izlenebilir bir checklist tut:
+>   tamamlananları kod/test kanıtıyla işaretle; eksik veya uygulanamaz olanları
+>   nedeni ve sonraki somut adımla bırak. “Her şey tamam” deme, ölçülebilir
+>   doğrulama yap.
+>
+> ### Doğrulama ve bitiş koşulları
+> - Mevcut test/lint/build komutlarını kullan; odaklı testler ekle ve tüm
+>   ilgili backend testlerini çalıştır.
+> - Frontend’i en az 390, 1024 ve 1440 px’te kontrol et. Taşma, bozuk
+>   hizalama, tema uyumsuzluğu ve ana etkileşimleri denetle.
+> - `git diff --check` çalıştır; test sonuçlarını checklist’e yaz.
+> - Gerçek kullanıcının hesabıyla login/register denemesi gerekiyorsa kullanıcı
+>   kendisi yapar. Asla parola isteme; bunu tek engel gibi gösterip tasarım/
+>   roadmap denetimini bırakma.
+> - Son yanıtta tamamlananları, doğrulanamayanları, nedenlerini ve açık kalan
+>   somut işleri kısa ve açık bildir.
 
-### User-assisted authentication smoke test
+## Known verified baseline
 
-- [ ] Ask the user to test signing in with their own account and report whether
-      it succeeds. Never request or record their password.
-- [ ] If sign-in succeeds, ask them to test registration only if they have an
-      email address they intend to use. Do not create a throwaway account in
-      their Neon database.
-- [ ] If either request fails, capture the exact displayed error and diagnose
-      from that message, browser network response, and backend logs. Do not
-      guess that a migration is needed: the current Neon migration status was
-      up to date.
-- [ ] If source changes are needed, add a focused regression test, update this
-      file, and rerun the checks below.
+- Latest implementation commit before this handoff update:
+  `78760be` (`feat: complete Kadran design and auth updates`).
+- The user's reported UI/auth changes were committed in that implementation.
+- Neon `prisma migrate status` reported `Database schema is up to date!` on
+  2026-10-27. This is a point-in-time check, not permission to migrate/reset.
+- Frontend lint/build and all 48 backend tests passed after those changes.
+- Vite reports a non-blocking JavaScript chunk above 500 KB.
+- A real successful login/registration has not been tested with the user's
+  account. Never request credentials; have the user test when necessary.
 
-This is the only currently known incomplete validation. The app's successful
-login/registration cannot be verified without the user's chosen account details
-and consent to perform those account actions.
+## Requirement audit checklist
 
-## Implemented scope
+The next AI must verify each item directly against the PDF and current app.
+These entries are not marked complete merely because related code exists.
 
-- Responsive Dashboard, week/month Calendar, list and card-grid Tasks views.
-- Calendar click/drag task creation, compact-empty-hours preference, textures,
-  desk illustrations, category visuals, and responsive calendar navigation.
-- Task create/edit form components, clock picker, quick durations, live preview,
-  recurrence editing, and tag assignment through the editor (not from list rows).
-- Settings, light/dark/system appearance, browser-local avatar and default task
-  colors, and shared theme-aware buttons/switches.
-- Sign-in/register screens with field validation and clearer API/network errors.
-- Persisted sessions are validated with `/auth/me` before protected pages render;
-  invalid sessions are cleared and protected routes return to sign-in.
-- `Design Tools/` is retained as a read-only original visual/roadmap archive.
-  Its guide explains which source is historical and where current status lives.
+- [ ] Extract the entire PDF roadmap into actionable requirements and add
+      individual traceable checklist entries below.
+- [ ] Compare every roadmap requirement with existing implementation; record
+      file/test/screen evidence and mark verified items.
+- [ ] Implement all remaining design, responsive, interaction, accessibility,
+      and backend/API requirements from the roadmap.
+- [ ] Verify Dashboard, Calendar week/month, Tasks list/grid, task create/edit,
+      Settings, Login and Register against the references at target widths.
+- [ ] Run frontend lint/build, backend tests, focused new tests, and diff check.
+- [ ] Report any remaining item that truly requires user action, external
+      access, or explicit database approval.
+
+## Project conventions and safety
+
+- Keep backend features in the existing router, validator, controller, service,
+  and database-layer pattern.
+- Enforce authentication and ownership in backend operations.
+- Keep task rules consistent between
+  `kadran-frontend/src/utils/taskRules.js` and
+  `kadran-backend/src/features/task/task.rules.js`.
+- Preserve existing API contracts unless a roadmap requirement calls for a
+  coordinated, tested change.
+- Keep `Design Tools/` as a read-only source archive.
+- Update this handoff as requirements are audited and implemented.
 
 ## Verification commands
 
@@ -60,23 +119,8 @@ npm.cmd --prefix kadran-backend test
 git diff --check
 ```
 
-For a read-only database migration check, run from `kadran-backend`:
+Read-only Neon migration status (run from `kadran-backend`):
 
 ```powershell
 npx.cmd prisma migrate status
 ```
-
-Do not run `prisma migrate reset`. Do not apply database changes without
-explicit user approval and confirmation of the target Neon branch.
-
-## Project conventions
-
-- Preserve the existing React/Vite frontend and Express/Prisma backend structure.
-- Keep task rules consistent between
-  `kadran-frontend/src/utils/taskRules.js` and
-  `kadran-backend/src/features/task/task.rules.js`.
-- The frontend expects the existing API contracts; keep ownership and
-  authentication checks on the backend.
-- Do not edit or delete the original files in `Design Tools/` unless the user
-  explicitly asks to change/remove the source references.
-- Keep this handoff current when meaningful work or validation changes.

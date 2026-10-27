@@ -6,15 +6,12 @@ reference. Do not edit or delete the original prototype source files.
 
 ## Current project status
 
-The supplied design has been implemented in the app, including the reported
-UI/auth fixes. For the current handoff, completed scope, validation commands,
-and the only known remaining check, read the project-root
-[`TODO.md`](../TODO.md). The root [`README.md`](../README.md) documents the
-current app and API.
-
-The original AI prompt and its “known gaps” below were written before the
-implementation. They are historical requirements/reference notes, not a list
-of current defects or work remaining.
+The app already contains substantial implementation work, but do not assume the
+design or roadmap is fully complete. Audit the whole roadmap PDF against the
+current code, then implement the still-missing applicable items. The
+project-root [`TODO.md`](../TODO.md) contains the task prompt, safety
+constraints, verification commands, and an audit checklist. The root
+[`README.md`](../README.md) documents the current app and API.
 
 ## Archive contents
 
@@ -29,10 +26,10 @@ of current defects or work remaining.
 
 ## Guidance for future agents
 
-- Read the root `TODO.md` and `README.md` first; those are authoritative for
-  current status and app behavior.
-- Use this folder only to compare intended visuals or interactions. Do not
-  replace the app with the standalone prototype.
+- Read the root `TODO.md` and `README.md` first; follow the handoff prompt and
+  verify the current implementation rather than assuming it is complete.
+- Use this folder and the roadmap PDF to identify and implement missing
+  requirements. Do not replace the app with the standalone prototype.
 - The actual data model and API contracts live in `kadran-backend/` and
   `kadran-frontend/src/`; names in the prototype are not API fields.
 - Preserve the existing React/Vite and Express/Prisma project structure.

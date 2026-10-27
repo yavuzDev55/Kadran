@@ -24,4 +24,12 @@ export const COLOR_PALETTE = [
   '#a3e635', // lime
 ];
 
-export const isValidColor = (color) => COLOR_PALETTE.includes(color);
+// Custom colors must be 6-digit hex (e.g. "#1a2B3c"). Shorthand ("#fff") and named colors are rejected.
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+export const isValidColor = (color) =>
+  typeof color === 'string' && (COLOR_PALETTE.includes(color.toLowerCase()) || HEX_COLOR.test(color));
+
+// Stored colors are always lowercase so equal colors compare equal.
+export const normalizeColor = (color) =>
+  typeof color === 'string' ? color.toLowerCase() : color;

@@ -3,6 +3,7 @@
 // the task continues into the previous / next week.
 
 import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
+import { PRIORITY_STYLE } from "../utils/taskRules";
 
 export default function CalendarSpanBar({ span, onClick }) {
   const color = getTaskDisplayColor(span);
@@ -11,7 +12,7 @@ export default function CalendarSpanBar({ span, onClick }) {
   return (
     <div
       onClick={() => onClick && onClick(span)}
-      title={span.title}
+      title={`${span.title} · ${(PRIORITY_STYLE[span.priority] || PRIORITY_STYLE.MEDIUM).label}`}
       style={{
         gridColumn: `${span.colStart} / ${span.colEnd}`,
         gridRow: span.row + 1,

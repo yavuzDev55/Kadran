@@ -163,3 +163,33 @@ export const placeSpans = (spans, windowStart, windowEnd) => {
 
   return { spans: placed, rowCount: rowEnds.length };
 };
+
+// ─── Vertical grid math ───────────────────────────────────────────────────────
+// The week grid has hour rows of different heights (empty hours can be compacted), so a clock
+// minute maps to a y position through the cumulative row heights. These two functions are the
+// only place that conversion lives; the grid, the drag selection and the event blocks all use them.
+
+/** y position (px) of a clock minute. Minutes outside [startMin, endMin] are clamped. */
+export const yForMinute = (minute, hourHeights, startMin, endMin) => {
+  const clampedMinute = Math.min(Math.max(minute, startMin), endMin);
+  const completeHours = Math.floor((clampedMinute - startMin) / 60);
+  const remainingMinutes = (clampedMinute - startMin) % 60;
+  const completedHeight = hourHeights.slice(0, completeHours).reduce((total, height) => total + height, 0);
+  if (completeHours >= hourHeights.length) return completedHeight;
+  return completedHeight + (remainingMinutes / 60) * hourHeights[completeHours];
+};
+
+/** Clock minute at a y position (px), snapped to 15 minutes and kept inside the visible range. */
+export const minuteForY = (position, hourHeights, startMin, endMin) => {
+  let offset = 0;
+  for (let index = 0; index < hourHeights.length; index += 1) {
+    const height = hourHeights[index];
+    if (position <= offset + height || index === hourHeights.length - 1) {
+      const fraction = Math.min(Math.max((position - offset) / height, 0), 1);
+      const minute = startMin + index * 60 + Math.round((fraction * 60) / 15) * 15;
+      return Math.min(Math.max(minute, startMin), endMin - 15);
+    }
+    offset += height;
+  }
+  return startMin;
+};

@@ -138,11 +138,20 @@ export const updateSettingsService = async (userId, body) => {
     }
   }
 
-  // Validate start < end after collecting both
-  const startHour = data.dayStartHour;
-  const endHour = data.dayEndHour;
-  if (startHour !== undefined && endHour !== undefined && startHour >= endHour) {
-    details.dayStartHour = 'dayStartHour must be less than dayEndHour';
+  // The day window is validated against the merged result: a request that changes only one
+  // side is compared with the value already stored for the other side.
+  if (
+    (data.dayStartHour !== undefined || data.dayEndHour !== undefined) &&
+    details.dayStartHour === undefined &&
+    details.dayEndHour === undefined
+  ) {
+    const current = await findUserById(userId);
+    if (!current) throw new NotFoundError('User', userId);
+    const startHour = data.dayStartHour ?? current.dayStartHour;
+    const endHour = data.dayEndHour ?? current.dayEndHour;
+    if (startHour >= endHour) {
+      details.dayStartHour = 'dayStartHour must be less than dayEndHour';
+    }
   }
 
   if (body.timeFormat !== undefined) {
@@ -162,7 +171,12 @@ export const updateSettingsService = async (userId, body) => {
   }
 
   if (body.hideCompleted !== undefined) {
-    data.hideCompleted = Boolean(body.hideCompleted);
+    // Strict check: Boolean("false") is true, so only real booleans are accepted.
+    if (typeof body.hideCompleted !== 'boolean') {
+      details.hideCompleted = 'hideCompleted must be a boolean';
+    } else {
+      data.hideCompleted = body.hideCompleted;
+    }
   }
 
   if (Object.keys(details).length > 0) {

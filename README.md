@@ -20,10 +20,10 @@ sense of time.
 - **Task-type rules** — course, homework, exam and custom tasks each allow different time models, recurrence and defaults, see [Task types](#task-types)
 - **Recurring tasks** — daily, weekly (chosen weekdays, each with its own time), or monthly (a day of the month or the last day). The end date is required and at most one year after the start. Every occurrence is a real task with its own completion, edit and delete
 - **Pinned tasks** — pin any task from the task form, the dashboard, the list view, or the calendar detail window; pinning a series pins every occurrence
-- **Tags** — added through a search box that suggests existing tags while you type; task colors come from a shared preset palette, and completability follows the task-type rules
+- **Tags** — added through a search box that suggests existing tags while you type; task colors come from a shared preset palette or a custom 6-digit hex color, and completability follows the task-type rules
 - **Task form** — live task preview, quick duration choices for timed tasks, and a clock-dial picker with native time entry retained
 - **User preferences** — week start, calendar hours, 12/24-hour clock, default view, hide completed, timezone
-- **Appearance** — light, dark, or system theme, avatar color, and per-task-type default colors; appearance choices are saved locally in the browser
+- **Appearance** — light, dark, or system theme, avatar color, and per-task-type default colors; custom task colors (hex) with recently used colors are saved locally in the browser
 - **Session security** — saved sessions are checked against the backend before protected pages render; expired sessions are cleared and sent back to sign-in
 
 **Design note:** KADRAN intentionally does **not** detect or block schedule
@@ -225,7 +225,7 @@ task is created (`kadran-backend/src/features/recurring/recurring.service.js`).
 ### Other task fields
 
 - `isCompletable` — default and whether it can be changed depend on the task type (see [Task types](#task-types))
-- `color` — optional, must come from the palette (`GET /meta/colors`); falls back to the type color
+- `color` — optional. Either a value from the palette (`GET /meta/colors`) or a 6-digit hex color such as `#1a2b3c` (case-insensitive; stored in lowercase). Shorthand (`#fff`) and named colors are rejected with 400. Falls back to the type color
 - `isPinned` — pinned tasks are listed in the dashboard's Pinned panel regardless of date. A pinned
   series is listed once, as its next unfinished occurrence. Set it in the task form, or toggle it with
   the 📌 button on the dashboard, in the list view and in the calendar's task detail window
@@ -288,14 +288,13 @@ a series), `sort` (`date`, `priority`, `title`, `created`, or `type`; defaults t
 - On the dashboard, a timed task that crosses midnight counts as active only until midnight.
 - A series cannot change its type, time model or repeat rule after it is created; delete it and create a new one.
 - A tag can be added to a whole series, but there is no series-wide tag removal endpoint.
-- There is no seed script. Backend tests (`npm test`) run without a database and cover recurrence, task rules, task-service behavior and query validation; there are no frontend tests yet.
+- There is no seed script. Backend tests (`npm --prefix kadran-backend test`) run without a database and cover recurrence, task rules, task-service behavior, settings, color rules, auth input validation and query validation. Frontend unit tests (`npm --prefix kadran-frontend test`) cover the calendar's vertical grid math only; there are no component tests yet.
 
 ## Technical follow-ups
 
 These are implementation issues to address before relying on the affected behavior in production:
 
-- **Settings validation:** `PATCH /auth/me` checks that `dayStartHour` is before `dayEndHour` only when both are included in the same request. Validate the merged values against the user's existing settings. The `hideCompleted` setting also needs a strict boolean check; coercing arbitrary values with `Boolean(...)` can turn the string `"false"` into `true`.
-- **Registration input types:** validate that `email` is a string before calling string methods such as `trim()`. A non-string value can currently become an internal server error instead of a validation response.
+- **Resolved:** `PATCH /auth/me` now validates `dayStartHour` / `dayEndHour` against the stored value of the other bound, and `hideCompleted` accepts only real booleans. Registration and login reject non-string emails with a validation error.
 - **Collapsed-series list performance:** `GET /tasks?collapseSeries=true` fetches all matching task rows and performs grouping and pagination in application memory. This can become expensive for users with many tasks or long-running series; move as much of the work and paging as practical to the database.
 - **Atomic task creation:** creating a task and attaching its tags uses separate database operations. A failure while resolving or linking tags can leave the task created without the requested tags. Consider wrapping the related writes in a database transaction.
 - **Build size:** the current frontend production build emits a JavaScript chunk larger than Vite's 500 kB warning threshold. Consider route-level code splitting if bundle size or initial load time becomes a concern.

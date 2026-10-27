@@ -23,7 +23,7 @@ import {
   ValidationError,
 } from '../../shared/utils/customErrors.js';
 import { getDayName, parseUTCDate, toDateStr } from '../../shared/utils/dateUtils.js';
-import { TYPE_DEFAULT_COLORS } from '../../config/colors.js';
+import { TYPE_DEFAULT_COLORS, normalizeColor } from '../../config/colors.js';
 import { generateOccurrenceDates } from '../recurring/recurring.service.js';
 import { TASK_RULES } from './task.rules.js';
 import { buildTimeFields, has } from './task.time.js';
@@ -84,7 +84,7 @@ const buildCommonData = (body) => {
     timeType: body.timeType,
     priority: body.priority ?? rule.priority,
     isCompletable: body.isCompletable ?? rule.completable.default,
-    color: body.color ?? null,
+    color: normalizeColor(body.color) ?? null,
     isPinned: Boolean(body.isPinned),
   };
 };
@@ -212,6 +212,7 @@ export const updateTask = async (userId, taskId, body) => {
   ['title', 'description', 'priority', 'color', 'isCompletable', 'isPinned'].forEach((key) => {
     if (body[key] !== undefined) data[key] = body[key];
   });
+  if (body.color !== undefined) data.color = normalizeColor(body.color);
   if (body.title !== undefined) data.title = body.title.trim();
   if (body.description === '') data.description = null;
 

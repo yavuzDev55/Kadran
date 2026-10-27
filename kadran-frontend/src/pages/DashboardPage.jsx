@@ -27,6 +27,13 @@ const CLOCK_TICK_MS = 30 * 1000;
 const WEEK_WINDOW_DAYS = 7;
 const PANEL_LIMIT = 5;
 
+// Time-of-day greeting for the heading, e.g. "Good morning, Yavuz".
+const greetingForHour = (hour) => {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
+
 const EMPTY_DATA = { key: null, upcoming: [], high: [], pinned: [], anytime: [], failed: {} };
 
 /** A high-priority task still worth showing: undated, or not over yet. */
@@ -176,7 +183,7 @@ export default function DashboardPage() {
     <div className="dashboard-page p-2 md:p-4 pb-12">
       <div className="dashboard-heading mb-4">
         <h1 className="font-title text-3xl font-normal text-ink">
-          {user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
+          {user?.displayName ? `${greetingForHour(new Date().getHours())}, ${user.displayName}` : "Dashboard"}
         </h1>
         <DeskIllustration className="dashboard-illustration" />
       </div>

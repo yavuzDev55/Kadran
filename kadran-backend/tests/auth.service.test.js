@@ -80,3 +80,38 @@ test('registration keeps profile fields optional for existing clients', async ()
     else process.env.JWT_SECRET = previousSecret;
   }
 });
+
+test('hideCompleted accepts only real booleans, so the string "false" is rejected', async () => {
+  await assert.rejects(
+    updateSettingsService(USER, { hideCompleted: 'false' }),
+    (error) => error instanceof ValidationError && error.details.hideCompleted === 'hideCompleted must be a boolean'
+  );
+  assert.equal(dbState.users[0].hideCompleted, false);
+
+  const { data } = await updateSettingsService(USER, { hideCompleted: true });
+  assert.equal(data.hideCompleted, true);
+});
+
+test('a day-window change alone is checked against the stored other bound', async () => {
+  // Stored window is 8..22.
+  await assert.rejects(
+    updateSettingsService(USER, { dayStartHour: 23 }),
+    (error) => error instanceof ValidationError && 'dayStartHour' in error.details
+  );
+  await assert.rejects(
+    updateSettingsService(USER, { dayEndHour: 7 }),
+    (error) => error instanceof ValidationError && 'dayStartHour' in error.details
+  );
+  assert.equal(dbState.users[0].dayStartHour, 8);
+  assert.equal(dbState.users[0].dayEndHour, 22);
+
+  const { data } = await updateSettingsService(USER, { dayEndHour: 20 });
+  assert.equal(data.dayEndHour, 20);
+  assert.equal(data.dayStartHour, 8);
+});
+
+test('a combined day-window change is validated on the new values only', async () => {
+  const { data } = await updateSettingsService(USER, { dayStartHour: 23, dayEndHour: 24 });
+  assert.equal(data.dayStartHour, 23);
+  assert.equal(data.dayEndHour, 24);
+});

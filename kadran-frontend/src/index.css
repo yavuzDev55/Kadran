@@ -237,16 +237,24 @@
     );
 }
 
+/* Priority frame: the whole outline carries it (not only the colored left edge).
+   High = solid 2px priority-red ring, medium = solid 1px, low = dashed 1px.
+   Inset shadows add weight without touching border widths, so the span bar's
+   border-l-0 (continues from a previous week) still works. */
 .kadran-task.priority-low {
   border-style: dashed;
-}
-
-.kadran-task.priority-high {
-  border-color: rgb(var(--color-ink) / 0.48);
+  border-color: rgb(var(--color-ink) / 0.22);
 }
 
 .kadran-task.priority-medium {
   border-style: solid;
+  border-color: rgb(var(--color-ink) / 0.32);
+}
+
+.kadran-task.priority-high {
+  border-style: solid;
+  border-color: rgb(var(--color-priority-high));
+  box-shadow: inset 0 0 0 1px rgb(var(--color-priority-high));
 }
 
 .kadran-task.priority-high {

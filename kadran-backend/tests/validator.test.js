@@ -156,3 +156,23 @@ test('GET /tasks query: valid parameters are parsed, bad ones rejected', () => {
   assert.equal(parse({}).filters.order, 'asc');
   assert.equal(parse({ showCompleted: 'false' }).filters.showCompleted, false);
 });
+
+// ─── custom colors ───
+import { isValidColor, normalizeColor } from '../src/config/colors.js';
+
+test('colors: palette values and 6-digit hex are accepted (case-insensitive), shorthand and names are not', () => {
+  assert.equal(isValidColor('#3b82f6'), true);
+  assert.equal(isValidColor('#1A2b3C'), true);
+  assert.equal(isValidColor('#3B82F6'), true);
+  assert.equal(isValidColor('#fff'), false);
+  assert.equal(isValidColor('red'), false);
+  assert.equal(isValidColor(['#000000']), false);
+  assert.equal(isValidColor(null), false);
+  assert.equal(normalizeColor('#1A2B3C'), '#1a2b3c');
+});
+
+test('task validator accepts a custom hex color and rejects an invalid one with 400 details', () => {
+  ok({ ...course, color: '#1a2b3c' });
+  assert.ok(check({ ...course, color: '#fff' }).color);
+  assert.ok(check({ ...course, color: 'blue' }).color);
+});

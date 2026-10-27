@@ -61,6 +61,14 @@ export const TASK_RULES = {
   },
 };
 
+// Priority is shown by the frame of a task (weight and style) and a small icon, never by color
+// alone, so the cue survives colored tasks. The frame itself is styled in index.css (.priority-*).
+export const PRIORITY_STYLE = {
+  HIGH: { icon: '↑', label: 'High priority', frame: 'bold' },
+  MEDIUM: { icon: '•', label: 'Medium priority', frame: 'normal' },
+  LOW: { icon: '↓', label: 'Low priority', frame: 'dashed' },
+};
+
 export const TYPE_COLORS = {
   COURSE: '#3b82f6',
   EXAM: '#ef4444',

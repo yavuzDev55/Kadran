@@ -6,8 +6,7 @@
 
 import { formatEventTimeLabel, formatTime } from "../utils/formatTime";
 import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
-
-const PRIORITY_ICON = { LOW: "↓", MEDIUM: "•", HIGH: "↑" };
+import { PRIORITY_STYLE } from "../utils/taskRules";
 
 export default function CalendarEventCard({ event, onClick, onToggle, timeFormat = "H24", variant = "block" }) {
   const accentColor = getTaskDisplayColor(event);
@@ -66,8 +65,12 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
           {checkbox("mt-0.5")}
           <span className="task-title font-semibold truncate">{event.title}</span>
         </div>
-        <span className="shrink-0 text-[11px] font-bold opacity-70 ml-1">
-          {PRIORITY_ICON[event.priority] || PRIORITY_ICON.MEDIUM}
+        <span
+          className="shrink-0 text-[11px] font-bold opacity-70 ml-1"
+          title={(PRIORITY_STYLE[event.priority] || PRIORITY_STYLE.MEDIUM).label}
+          aria-label={(PRIORITY_STYLE[event.priority] || PRIORITY_STYLE.MEDIUM).label}
+        >
+          {(PRIORITY_STYLE[event.priority] || PRIORITY_STYLE.MEDIUM).icon}
         </span>
       </div>
 

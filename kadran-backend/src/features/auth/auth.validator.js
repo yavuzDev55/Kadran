@@ -8,8 +8,12 @@ export const validateRegister = (req, res, next) => {
     const { email, password, timeZone } = req.body;
     const errors = [];
 
-    // Email
-    if (!email || email.trim() === '') {
+    // Email (non-strings are rejected before string methods run, so they never reach a 500)
+    if (email === undefined || email === null || email === '') {
+      errors.push('Email is required');
+    } else if (typeof email !== 'string') {
+      errors.push('Email must be a string');
+    } else if (email.trim() === '') {
       errors.push('Email is required');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errors.push('Invalid email format');
@@ -41,7 +45,13 @@ export const validateLogin = (req, res, next) => {
     const { email, password } = req.body;
     const errors = [];
 
-    if (!email || email.trim() === '') errors.push('Email is required');
+    if (email === undefined || email === null || email === '') {
+      errors.push('Email is required');
+    } else if (typeof email !== 'string') {
+      errors.push('Email must be a string');
+    } else if (email.trim() === '') {
+      errors.push('Email is required');
+    }
     if (!password) errors.push('Password is required');
 
     if (errors.length > 0) throw new ValidationError('Login validation failed', { errors });

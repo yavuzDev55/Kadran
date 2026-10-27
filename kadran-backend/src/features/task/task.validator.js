@@ -58,7 +58,7 @@ export const validateCommonFields = (body, details, { partial = false } = {}) =>
   }
 
   if (body.color !== undefined && body.color !== null && !isValidColor(body.color)) {
-    details.color = 'color must be one of the preset palette values';
+    details.color = 'color must be a preset palette value or a 6-digit hex color (#rrggbb)';
   }
 
   if (body.isCompletable !== undefined && typeof body.isCompletable !== 'boolean') {

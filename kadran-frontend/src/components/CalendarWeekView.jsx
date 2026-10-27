@@ -8,7 +8,7 @@
 import CalendarEventCard from "./CalendarEventCard";
 import CalendarSpanBar from "./CalendarSpanBar";
 import { useEffect, useRef, useState } from "react";
-import { MARKER_MINUTES, layoutDayEvents, placeSpans } from "../utils/calendarUtils";
+import { MARKER_MINUTES, layoutDayEvents, minuteForY, placeSpans, yForMinute } from "../utils/calendarUtils";
 import { getWeekDayLabels, parseDate } from "../utils/dateUtils";
 import { formatHourLabel } from "../utils/formatTime";
 
@@ -42,29 +42,6 @@ const getHourHeights = (events, startMin, endMin, compactEmptyHours) => {
     heights.push(compactEmptyHours && !occupied ? COMPACT_HOUR_HEIGHT : HOUR_HEIGHT);
   }
   return heights;
-};
-
-const getGridPosition = (minute, hourHeights, startMin, endMin) => {
-  const clampedMinute = Math.min(Math.max(minute, startMin), endMin);
-  const completeHours = Math.floor((clampedMinute - startMin) / 60);
-  const remainingMinutes = (clampedMinute - startMin) % 60;
-  const completedHeight = hourHeights.slice(0, completeHours).reduce((total, height) => total + height, 0);
-  if (completeHours >= hourHeights.length) return completedHeight;
-  return completedHeight + (remainingMinutes / 60) * hourHeights[completeHours];
-};
-
-const getMinuteAtPosition = (position, hourHeights, startMin, endMin) => {
-  let offset = 0;
-  for (let index = 0; index < hourHeights.length; index += 1) {
-    const height = hourHeights[index];
-    if (position <= offset + height || index === hourHeights.length - 1) {
-      const fraction = Math.min(Math.max((position - offset) / height, 0), 1);
-      const minute = startMin + index * 60 + Math.round((fraction * 60) / 15) * 15;
-      return Math.min(Math.max(minute, startMin), endMin - 15);
-    }
-    offset += height;
-  }
-  return startMin;
 };
 
 const formatClockTime = (minutes) =>
@@ -227,7 +204,7 @@ export default function CalendarWeekView({
             const { visible, before, after } = splitByVisibleHours(dayEvents, startMin, endMin);
             const getMinuteFromPointer = (element, clientY) => {
               const rect = element.getBoundingClientRect();
-              return getMinuteAtPosition(clientY - rect.top, hourHeights, startMin, endMin);
+              return minuteForY(clientY - rect.top, hourHeights, startMin, endMin);
             };
 
             return (
@@ -284,11 +261,11 @@ export default function CalendarWeekView({
                       aria-hidden="true"
                       className="pointer-events-none absolute left-1 right-1 rounded border border-accent/70 bg-accent/15"
                       style={{
-                        top: `${getGridPosition(Math.min(selection.start, selection.end), hourHeights, startMin, endMin)}px`,
+                        top: `${yForMinute(Math.min(selection.start, selection.end), hourHeights, startMin, endMin)}px`,
                         height: `${Math.max(
                           15,
-                          getGridPosition(Math.max(selection.start, selection.end), hourHeights, startMin, endMin) -
-                            getGridPosition(Math.min(selection.start, selection.end), hourHeights, startMin, endMin)
+                          yForMinute(Math.max(selection.start, selection.end), hourHeights, startMin, endMin) -
+                            yForMinute(Math.min(selection.start, selection.end), hourHeights, startMin, endMin)
                         )}px`,
                       }}
                     />
@@ -307,8 +284,8 @@ export default function CalendarWeekView({
 
                 {layoutDayEvents(visible).map((event) => {
                   const eventEnd = event.anchorMinutes + Math.max(event.durationMinutes, MARKER_MINUTES);
-                  const top = getGridPosition(event.anchorMinutes, hourHeights, startMin, endMin);
-                  const bottom = getGridPosition(eventEnd, hourHeights, startMin, endMin);
+                  const top = yForMinute(event.anchorMinutes, hourHeights, startMin, endMin);
+                  const bottom = yForMinute(eventEnd, hourHeights, startMin, endMin);
                   const height = Math.max(bottom - top, MIN_BLOCK_HEIGHT);
                   const isMarker = event.durationMinutes === 0;
 

@@ -1,6 +1,5 @@
 import ClockTimeInput from "./ClockTimeInput";
-
-const smallInputClass = "ui-input text-sm";
+import DatePicker from "./DatePicker";
 
 function Field({ label, children, hint }) {
   return (
@@ -20,21 +19,19 @@ export default function TaskTimeFields({ timeType, form, set }) {
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Start day *">
-            <input
-              type="date"
+            <DatePicker
+              label="Start day"
               value={form.rangeStartDate}
-              onChange={(e) => set({ rangeStartDate: e.target.value })}
-              className={smallInputClass}
+              onChange={(rangeStartDate) => set({ rangeStartDate })}
               required
             />
           </Field>
           <Field label="End day *">
-            <input
-              type="date"
+            <DatePicker
+              label="End day"
               value={form.rangeEndDate}
               min={form.rangeStartDate || undefined}
-              onChange={(e) => set({ rangeEndDate: e.target.value })}
-              className={smallInputClass}
+              onChange={(rangeEndDate) => set({ rangeEndDate })}
               required
             />
           </Field>
@@ -75,11 +72,10 @@ export default function TaskTimeFields({ timeType, form, set }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Field label="Date *">
-        <input
-          type="date"
+        <DatePicker
+          label="Date"
           value={form.date}
-          onChange={(e) => set({ date: e.target.value })}
-          className={smallInputClass}
+          onChange={(date) => set({ date })}
           required
         />
       </Field>

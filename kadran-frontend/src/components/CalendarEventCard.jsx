@@ -12,6 +12,8 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
   const accentColor = getTaskDisplayColor(event);
   const done = event.isCompleted;
   const timeLabel = formatEventTimeLabel(event, timeFormat);
+  const description = event.originalTask?.description?.trim();
+  const tags = event.tags || [];
   const taskClasses = `kadran-task type-${event.type.toLowerCase()} priority-${event.priority.toLowerCase()} ${
     event.timeType === "DEADLINE" ? "is-deadline" : event.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
   } ${done ? "is-completed" : ""}`;
@@ -40,7 +42,7 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
         style={{ "--task-color": accentColor }}
         className={`${taskClasses} ${
           isCompact
-            ? "flex items-center gap-1 px-1 rounded cursor-pointer hover:brightness-95 transition text-[10px] py-0.5"
+            ? "kadran-task-compact flex items-center gap-1 px-1 rounded cursor-pointer hover:brightness-95 transition text-[10px] py-0.5"
             : "kadran-task-marker flex h-full items-center gap-1 px-1 cursor-pointer hover:brightness-95 transition text-[11px]"
         }`}
         title={`${timeLabel} ${event.title}`.trim()}
@@ -77,6 +79,17 @@ export default function CalendarEventCard({ event, onClick, onToggle, timeFormat
       {event.startTime && event.endTime && (
         <div className="opacity-80 mt-1 flex-none">
           {formatTime(event.startTime, timeFormat)} - {formatTime(event.endTime, timeFormat)}
+        </div>
+      )}
+
+      {(description || tags.length > 0) && (
+        <div className="kadran-task-extras">
+          {description && <span className="kadran-task-description" title={description}>{description}</span>}
+          {tags.length > 0 && (
+            <span className="kadran-task-tags" title={tags.map((tag) => `#${tag}`).join(" ")}>
+              {tags.map((tag) => `#${tag}`).join(" ")}
+            </span>
+          )}
         </div>
       )}
     </div>

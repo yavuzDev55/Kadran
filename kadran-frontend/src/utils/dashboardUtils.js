@@ -150,3 +150,20 @@ export const formatDayHeading = (dateStr, todayStr) => {
     dateStr === todayStr ? 'Today · ' : dateStr === addDays(todayStr, 1) ? 'Tomorrow · ' : '';
   return `${prefix}${weekday} ${dateStr}`;
 };
+
+/** "2 h 15 min", "45 min", "3 h" - always at least one minute. */
+export const formatDuration = (minutes) => {
+  const total = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (!hours) return `${rest} min`;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+};
+
+/** Icon for a task: the time model wins for deadlines, open-ended and any-time tasks. */
+export const taskIconName = (task) => {
+  if (task.timeType === 'DEADLINE') return 'flag';
+  if (task.timeType === 'OPEN_ENDED') return 'start';
+  if (task.timeType === 'ANY_TIME') return 'any';
+  return String(task.type || 'custom').toLowerCase();
+};

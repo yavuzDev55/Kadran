@@ -385,7 +385,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="p-2 md:p-4 mb-20">
+    <div className="w-full p-2 md:p-4 pb-10">
       <div className="flex justify-between items-center mb-4">
         <h1 className="font-title text-3xl font-normal text-ink">Tasks</h1>
         <Link

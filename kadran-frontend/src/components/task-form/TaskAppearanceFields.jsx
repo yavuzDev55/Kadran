@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Switch from "../ui/Switch";
 
 const PALETTE = [
-  "#3b82f6", "#ef4444", "#22c55e", "#94a3b8",
-  "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6",
-  "#f97316", "#64748b", "#06b6d4", "#a3e635",
+  "#2463a6", "#c23b3b", "#27864b", "#8a4fb0",
+  "#007c78", "#d46a1f", "#b12f72", "#5d6675",
 ];
 
 const HEX_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -44,26 +44,42 @@ const LIGHT_COLOR_LUMINANCE = 0.8;
 
 function ColorPicker({ value, onChange, typeDefault }) {
   const [recent, setRecent] = useState(readRecentColors);
-  // Text the user is typing; null means "show the saved value".
-  const [draft, setDraft] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(typeDefault);
+  const rootRef = useRef(null);
 
   const isCustom = value !== null && !PALETTE.includes(value);
-  const shownText = draft ?? value ?? "";
-  const draftInvalid = draft !== null && draft !== "" && !HEX_PATTERN.test(draft);
+  const draftInvalid = draft !== "" && !HEX_PATTERN.test(draft);
   const isLight = value !== null && HEX_PATTERN.test(value) && relativeLuminance(value) > LIGHT_COLOR_LUMINANCE;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const choose = (hex, { custom = false } = {}) => {
     onChange(hex);
-    setDraft(null);
     if (custom) {
+      setDraft(hex);
       rememberRecentColor(hex);
       setRecent(readRecentColors());
     }
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2 items-center">
+    <div className="task-color-picker" ref={rootRef}>
+      <div className="task-color-picker__palette" aria-label="Task colors">
         <button
           type="button"
           onClick={() => choose(null)}
@@ -85,61 +101,78 @@ function ColorPicker({ value, onChange, typeDefault }) {
             aria-label={`Set task color ${hex}`}
             aria-pressed={value === hex}
             title={hex}
-            className={`w-7 h-7 rounded-full border-2 transition ${
-              value === hex ? "border-ink scale-110" : "border-transparent hover:border-ink"
+            className={`task-color-picker__swatch ${
+              value === hex ? "is-selected" : ""
             }`}
             style={{ backgroundColor: hex }}
           />
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center">
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <span>Custom</span>
-          <input
-            type="color"
-            aria-label="Pick a custom task color"
-            value={isCustom ? value : HEX_PATTERN.test(typeDefault || "") ? typeDefault : "#3b82f6"}
-            onChange={(e) => choose(e.target.value.toLowerCase(), { custom: true })}
-            className="w-7 h-7 p-0 border-0 bg-transparent cursor-pointer"
-          />
-        </label>
-        <input
-          type="text"
-          inputMode="text"
-          aria-label="Custom color hex value"
-          aria-invalid={draftInvalid}
-          aria-describedby={draftInvalid ? "custom-color-error" : undefined}
-          placeholder="#rrggbb"
-          value={shownText}
-          maxLength={7}
-          onChange={(e) => {
-            const text = e.target.value.trim();
-            setDraft(text);
-            if (HEX_PATTERN.test(text)) choose(text.toLowerCase(), { custom: true });
+      <div className="task-color-picker__custom-row">
+        <button
+          type="button"
+          className={`task-color-picker__custom-trigger ${open ? "is-open" : ""}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="Choose a custom task color"
+          onClick={() => {
+            setDraft(isCustom ? value : typeDefault);
+            setOpen((current) => !current);
           }}
-          onBlur={() => setDraft(null)}
-          className={`w-24 px-2 py-1 font-mono text-xs bg-surface border rounded ${
-            draftInvalid ? "border-danger" : "border-border/30"
-          }`}
-        />
-        {recent.map((hex) => (
+        >
+          <span style={{ "--swatch-color": isCustom ? value : typeDefault }} />
+          Custom color
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+        </button>
+        {recent.slice(0, MAX_RECENT).map((hex, index) => (
           <button
             key={hex}
             type="button"
             onClick={() => choose(hex, { custom: true })}
-            aria-label={`Use recent color ${hex}`}
+            aria-label={`Use recent color ${hex}${index === 0 ? ", most recent" : ""}`}
             title={`Recent: ${hex}`}
-            className={`w-5 h-5 rounded-full border ${value === hex ? "border-ink" : "border-border/30"}`}
+            className={`task-color-picker__recent ${value === hex ? "is-selected" : ""}`}
             style={{ backgroundColor: hex }}
           />
         ))}
       </div>
 
-      {draftInvalid && (
-        <p id="custom-color-error" className="text-xs text-danger">
-          Use a 6-digit hex color such as #3b82f6.
-        </p>
+      {open && (
+        <div className="task-color-picker__popover" role="dialog" aria-label="Custom task color">
+          <div className="task-color-picker__popover-title">
+            <span>Custom color</span>
+            <button type="button" aria-label="Close color picker" onClick={() => setOpen(false)}>×</button>
+          </div>
+          <label className="task-color-picker__color-input">
+            <input
+              type="color"
+              aria-label="Choose a color"
+              value={HEX_PATTERN.test(draft) ? draft : typeDefault}
+              onChange={(event) => choose(event.target.value.toLowerCase(), { custom: true })}
+            />
+            <span>Choose from color spectrum</span>
+          </label>
+          <label className="task-color-picker__hex">
+            <span>Hex value</span>
+            <input
+              type="text"
+              inputMode="text"
+              aria-label="Custom color hex value"
+              aria-invalid={draftInvalid}
+              aria-describedby={draftInvalid ? "custom-color-error" : undefined}
+              placeholder="#2463a6"
+              value={draft}
+              maxLength={7}
+              onChange={(event) => {
+                const text = event.target.value.trim();
+                setDraft(text);
+                if (HEX_PATTERN.test(text)) choose(text.toLowerCase(), { custom: true });
+              }}
+            />
+          </label>
+          {draftInvalid && <p id="custom-color-error" className="task-color-picker__error">Enter a 6-digit hex color.</p>}
+        </div>
       )}
       {isLight && (
         <p role="status" className="text-xs text-muted">
@@ -168,38 +201,22 @@ export default function TaskAppearanceFields({
             <ColorPicker value={form.color} onChange={(color) => set({ color })} typeDefault={typeDefault} />
           </div>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isCompletable"
-              checked={form.isCompletable}
-              disabled={!completableEditable}
-              onChange={(e) => set({ isCompletable: e.target.checked })}
-              className="w-4 h-4 accent-accent"
-            />
-            <label htmlFor="isCompletable" className="text-sm text-ink cursor-pointer">
-              This task can be marked as complete
-              {!completableEditable && (
-                <span className="text-muted"> (always on for {type.toLowerCase()})</span>
-              )}
-            </label>
-          </div>
+          <Switch
+            label="This task can be marked as complete"
+            description={!completableEditable ? `Always on for ${type.toLowerCase()} tasks.` : undefined}
+            checked={form.isCompletable}
+            disabled={!completableEditable}
+            onChange={(isCompletable) => set({ isCompletable })}
+          />
         </>
       )}
 
-      <div className="flex items-center gap-3">
-        <input
-          type="checkbox"
-          id="isPinned"
-          checked={form.isPinned}
-          onChange={(e) => set({ isPinned: e.target.checked })}
-          className="w-4 h-4 accent-accent"
-        />
-        <label htmlFor="isPinned" className="text-sm text-ink cursor-pointer">
-          📌 Pin {isOccurrence || isSeriesEdit || form.recurring ? "the whole series" : "this task"} (listed in the
-          dashboard&apos;s Pinned panel)
-        </label>
-      </div>
+      <Switch
+        label={`Pin ${isOccurrence || isSeriesEdit || form.recurring ? "the whole series" : "this task"}`}
+        description="Listed in the dashboard's Pinned panel."
+        checked={form.isPinned}
+        onChange={(isPinned) => set({ isPinned })}
+      />
     </>
   );
 }

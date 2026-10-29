@@ -2,26 +2,22 @@
 // Central color config. effectiveColor = task.color ?? TYPE_DEFAULT_COLORS[task.type]
 
 export const TYPE_DEFAULT_COLORS = {
-  COURSE:   '#3b82f6', // blue-500
-  EXAM:     '#ef4444', // red-500
-  HOMEWORK: '#22c55e', // green-500
-  CUSTOM:   '#94a3b8', // slate-400
+  COURSE:   '#2463a6',
+  EXAM:     '#c23b3b',
+  HOMEWORK: '#27864b',
+  CUSTOM:   '#8a4fb0',
 };
 
-// Preset palette exposed via GET /meta/colors and validated on create/update.
+// Preset palette exposed via GET /meta/colors. Any 6-digit hex is also accepted, see isValidColor.
 export const COLOR_PALETTE = [
-  '#3b82f6', // blue
-  '#ef4444', // red
-  '#22c55e', // green
-  '#94a3b8', // slate
-  '#f59e0b', // amber
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#14b8a6', // teal
-  '#f97316', // orange
-  '#64748b', // slate-dark
-  '#06b6d4', // cyan
-  '#a3e635', // lime
+  '#2463a6',
+  '#c23b3b',
+  '#27864b',
+  '#8a4fb0',
+  '#007c78',
+  '#d46a1f',
+  '#b12f72',
+  '#5d6675',
 ];
 
 // Custom colors must be 6-digit hex (e.g. "#1a2B3c"). Shorthand ("#fff") and named colors are rejected.

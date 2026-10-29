@@ -351,6 +351,29 @@ export default function TaskCreatePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    const requiredDates = mode === "edit-series"
+      ? []
+      : mode === "create" && form.recurring
+        ? [
+          ["recStart", "First day"],
+          ["recEnd", "Last day"],
+          ]
+        : form.timeType === "MULTI_DAY"
+          ? [
+            ["rangeStartDate", "Start day"],
+            ["rangeEndDate", "End day"],
+            ]
+          : ["TIMED", "OPEN_ENDED", "DEADLINE"].includes(form.timeType)
+            ? [["date", "Date"]]
+            : [];
+    const missingDate = requiredDates.find(([field]) => !form[field]);
+    if (missingDate) {
+      setError(`${missingDate[1]} is required.`);
+      document.querySelector(".date-picker__trigger[aria-required='true']")?.focus();
+      return;
+    }
+
     setSaving(true);
     try {
       if (mode === "create") await submitCreate();
@@ -397,7 +420,7 @@ export default function TaskCreatePage() {
     : previewTime;
 
   return (
-    <div className="max-w-5xl mx-auto mt-8 p-4 mb-20">
+    <div className="w-full px-3 py-4 sm:px-5 lg:px-7">
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-title text-3xl text-ink">{heading}</h1>
         <Link to={isEdit ? "/tasks" : "/"} className="text-sm text-muted hover:text-ink transition">
@@ -416,7 +439,7 @@ export default function TaskCreatePage() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)] gap-5 items-start">
-        <section className="ui-panel p-4 md:p-6">
+        <section className="ui-panel task-create-form p-4 md:p-6">
           {error && (
             <div className="mb-4 p-3 bg-danger/10 border border-danger/40 text-danger rounded text-sm whitespace-pre-wrap">
               {error}
@@ -436,13 +459,6 @@ export default function TaskCreatePage() {
 
               {isOccurrence && <TaskOccurrenceFields form={form} set={set} />}
 
-              {!isSeriesEdit && !form.recurring && (
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-sm font-semibold text-ink">When</h3>
-                  <TaskTimeFields timeType={form.timeType} form={form} set={set} />
-                </div>
-              )}
-
               {showRecurrence && (
                 <TaskRecurrenceFields
                   form={form}
@@ -451,6 +467,13 @@ export default function TaskCreatePage() {
                   onToggleWeekDay={toggleWeekDay}
                   onSetSlot={setSlot}
                 />
+              )}
+
+              {!isSeriesEdit && !form.recurring && (
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-ink">When</h3>
+                  <TaskTimeFields timeType={form.timeType} form={form} set={set} />
+                </div>
               )}
 
               <TaskAppearanceFields
@@ -475,36 +498,36 @@ export default function TaskCreatePage() {
           </form>
         </section>
 
-        <aside className="ui-panel p-4 lg:sticky lg:top-20" aria-live="polite">
+        <aside className="ui-panel min-w-0 p-4 lg:sticky lg:top-20" aria-live="polite">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Live preview</p>
             <h2 className="font-title text-xl text-ink mt-1">On your calendar</h2>
           </div>
           <div
-            className={`kadran-task kadran-task-row kadran-task-card type-${form.type.toLowerCase()} priority-${form.priority.toLowerCase()} ${
+            className={`task-preview-card kadran-task kadran-task-card type-${form.type.toLowerCase()} priority-${form.priority.toLowerCase()} ${
               form.timeType === "DEADLINE" ? "is-deadline" : form.timeType === "OPEN_ENDED" ? "is-open-ended" : ""
-            } rounded-lg p-4 pl-10`}
+            } rounded-lg p-3`}
             style={{ "--task-color": form.color || getTaskTypeDisplayColor(form.type) }}
           >
-            <div className="flex items-start justify-between gap-3">
-              <p className="task-title font-semibold break-words">{form.title.trim() || "Your task title"}</p>
+            <div className="task-preview-card__title">
+              <p className="task-title font-semibold">{form.title.trim() || "Your task title"}</p>
               {form.isPinned && <span aria-label="Pinned" title="Pinned">📌</span>}
             </div>
-            <p className={`mt-2 text-sm text-muted ${form.timeType === "ANY_TIME" ? "anytime-heading" : ""}`}>
+            <p className={`task-preview-card__schedule text-sm text-muted ${form.timeType === "ANY_TIME" ? "anytime-heading" : ""}`}>
               {previewSchedule}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+            <div className="task-preview-card__badges text-[11px]">
               <span className="rounded-full border border-border/20 px-2 py-1">{previewType?.label}</span>
               <span className="rounded-full border border-border/20 px-2 py-1 capitalize">{previewTimeType}</span>
               {form.priority === "HIGH" && <span className="text-danger font-semibold">High priority</span>}
             </div>
             {form.description.trim() && (
-              <p className="mt-3 text-sm text-muted break-words">{form.description}</p>
+              <p className="task-preview-card__extra">{form.description}</p>
             )}
             {form.tags.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <div className="task-preview-card__tags">
                 {form.tags.map((tag) => (
-                  <span key={tag} className="rounded-full bg-surface-muted px-2 py-1 text-[11px] text-muted">{tag}</span>
+                  <span key={tag} title={tag}>#{tag}</span>
                 ))}
               </div>
             )}

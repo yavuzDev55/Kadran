@@ -14,9 +14,11 @@ import { setTaskPinned } from "../services/taskService";
 import Switch from "../components/ui/Switch";
 import DeskIllustration from "../components/DeskIllustration";
 import { buildCalendarItems } from "../utils/calendarUtils";
+import { getTaskTypeDisplayColor } from "../utils/taskDisplaySettings";
 import {
   addDays,
   getMonthDaysArray,
+  getNowMinutesInTimezone,
   getTodayInTimezone,
   getWeekDaysArray,
   parseDate,
@@ -89,6 +91,13 @@ export default function CalendarPage() {
 
   // The day the visible week / month is derived from ('YYYY-MM-DD')
   const [anchor, setAnchor] = useState(() => getTodayInTimezone(timeZone));
+  // Minute of the day in the user's timezone, refreshed every minute for the "now" line.
+  const [nowMinutes, setNowMinutes] = useState(() => getNowMinutesInTimezone(timeZone));
+  useEffect(() => {
+    const update = () => setNowMinutes(getNowMinutesInTimezone(timeZone));
+    const timer = window.setInterval(update, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [timeZone]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   // { kind: "task" | "series", id, label } while the delete dialog is open
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -247,6 +256,20 @@ export default function CalendarPage() {
       ? `${weekDays[0]} — ${weekDays[6]}`
       : new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(parseDate(anchor));
 
+  // Sheet heading (Design Tools reference): "October 2026", or "Oct – Nov 2026" for a week across months.
+  const heroTitle = (() => {
+    const long = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" });
+    const short = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+    if (view === "month") return { month: long.format(parseDate(anchor)), year: anchor.slice(0, 4) };
+    const first = parseDate(weekDays[0]);
+    const last = parseDate(weekDays[6]);
+    const sameMonth = first.getUTCMonth() === last.getUTCMonth();
+    return {
+      month: sameMonth ? long.format(last) : `${short.format(first)} – ${short.format(last)}`,
+      year: weekDays[6].slice(0, 4),
+    };
+  })();
+
   const deleteTitle =
     pendingDelete?.kind === "series"
       ? "Delete the whole series?"
@@ -261,68 +284,67 @@ export default function CalendarPage() {
         : "This task will be permanently deleted. This cannot be undone.";
 
   return (
-    <div className="calendar-page mx-auto w-full p-2 md:p-4 pb-12">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-4 gap-4">
-        <div className="calendar-heading">
-          <h1 className="font-title text-3xl font-normal text-ink">Calendar</h1>
-          <DeskIllustration />
+    <div className="calendar-page w-full p-2 md:p-4 pb-12">
+      <section className="sheet" aria-label="Calendar">
+        <div className="sheet-hero">
+          <h1 className="font-title text-[28px] sm:text-[34px] font-normal leading-[1.05] text-ink">
+            {heroTitle.month}
+            <span className="ml-1.5 font-sans text-sm font-medium text-muted">{heroTitle.year}</span>
+          </h1>
+          <DeskIllustration className="sheet-banner" />
         </div>
+        <p className="sr-only" aria-live="polite">{navLabel}</p>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-surface-muted p-1 rounded border border-border/20" role="group" aria-label="Calendar view">
+        <div className="sheet-tools">
+          <div className="seg" role="group" aria-label="Calendar view">
             {["week", "month"].map((option) => (
               <button
                 key={option}
                 type="button"
                 aria-pressed={view === option}
                 onClick={() => setView(option)}
-                className={`px-4 py-1.5 text-sm font-semibold rounded transition capitalize ${
-                  view === option ? "bg-surface text-ink border border-border/20" : "text-muted hover:text-ink"
-                }`}
+                className="capitalize"
               >
                 {option}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleGoToToday}
-              className="ui-button ui-button--sm"
-            >
-              Today
-            </button>
-            <div className="flex items-center bg-surface rounded border border-border/25 overflow-hidden">
-              <button
-                type="button"
-                onClick={handlePrevious}
-                className="px-3 py-1.5 text-muted hover:text-ink hover:bg-surface-muted transition"
-                aria-label={view === "week" ? "Previous week" : "Previous month"}
-              >
-                &lt;
-              </button>
-              <span className="px-4 text-sm font-semibold text-ink min-w-[180px] text-center">{navLabel}</span>
-              <button
-                type="button"
-                onClick={handleNext}
-                className="px-3 py-1.5 text-muted hover:text-ink hover:bg-surface-muted transition"
-                aria-label={view === "week" ? "Next week" : "Next month"}
-              >
-                &gt;
-              </button>
-            </div>
-          </div>
-          {view === "week" && (
+          {view === "week" ? (
             <Switch
               label="Compact empty hours"
               checked={compactEmptyHours}
               onChange={updateCompactHours}
-              className="text-xs"
+              className="mr-auto text-xs"
             />
+          ) : (
+            <span className="mr-auto" />
           )}
+
+          <button
+            type="button"
+            onClick={handlePrevious}
+            className="ui-button ui-button--icon"
+            aria-label={view === "week" ? "Previous week" : "Previous month"}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+          </button>
+          <button type="button" onClick={handleGoToToday} className="ui-button">
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={handleNext}
+            className="ui-button ui-button--icon"
+            aria-label={view === "week" ? "Next week" : "Next month"}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
-      </div>
 
       <div className="calendar-workspace flex flex-col md:flex-row gap-4 items-start">
         <FilterSidebar
@@ -353,6 +375,7 @@ export default function CalendarPage() {
               weekStartsOn={weekStartsOn}
               timeFormat={timeFormat}
               compactEmptyHours={compactEmptyHours}
+              nowMinutes={nowMinutes}
             />
           ) : (
             <CalendarMonthView
@@ -369,6 +392,26 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
+
+        <div className="legendbar">
+          {[
+            ["COURSE", "Course"],
+            ["EXAM", "Exam"],
+            ["HOMEWORK", "Homework"],
+            ["CUSTOM", "Custom"],
+          ].map(([type, label]) => (
+            <span key={type}>
+              <i
+                className={`kadran-task type-${type.toLowerCase()} legend-swatch`}
+                style={{ "--task-color": getTaskTypeDisplayColor(type) }}
+              />
+              {label}
+            </span>
+          ))}
+          <span>Folded corner: high priority</span>
+          <span>Dashed frame: low priority</span>
+        </div>
+      </section>
 
       <TaskDetailModal
         event={selectedEvent}

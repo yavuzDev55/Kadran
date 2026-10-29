@@ -37,7 +37,7 @@ export const serializeTask = (task) => {
   return {
     ...rest,
     tags: (tags || []).map((tt) => tt.tag.name),
-    effectiveColor: task.color ?? TYPE_DEFAULT_COLORS[task.type] ?? '#94a3b8',
+    effectiveColor: task.color ?? TYPE_DEFAULT_COLORS[task.type] ?? TYPE_DEFAULT_COLORS.CUSTOM,
   };
 };
 

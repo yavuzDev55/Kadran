@@ -16,12 +16,11 @@ import {
   sortByTime,
   taskToItem,
 } from "../utils/dashboardUtils";
-import { addDays, getNowMinutesInTimezone, getTodayInTimezone, sliceDate } from "../utils/dateUtils";
+import { addDays, getNowMinutesInTimezone, getTodayInTimezone, parseDate, sliceDate } from "../utils/dateUtils";
 import ActiveTaskPanel from "../components/ActiveTaskPanel";
 import AgendaPanel from "../components/AgendaPanel";
 import AnyTimePanel from "../components/AnyTimePanel";
 import TaskListPanel from "../components/TaskListPanel";
-import DeskIllustration from "../components/DeskIllustration";
 
 const CLOCK_TICK_MS = 30 * 1000;
 const WEEK_WINDOW_DAYS = 7;
@@ -180,17 +179,21 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="dashboard-page p-2 md:p-4 pb-12">
-      <div className="dashboard-heading mb-4">
-        <h1 className="font-title text-3xl font-normal text-ink">
+    <div className="k-page">
+      <header className="k-phead">
+        <h1>
           {user?.displayName ? `${greetingForHour(new Date().getHours())}, ${user.displayName}` : "Dashboard"}
         </h1>
-        <DeskIllustration className="dashboard-illustration" />
-      </div>
+        <div className="k-phead__sub">
+          {new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(
+            parseDate(todayStr)
+          )}
+        </div>
+      </header>
 
-      <div className="relative flex flex-col gap-4">
+      <div className="relative grid gap-5" aria-busy={loading}>
         {loading && (
-          <div className="absolute inset-0 bg-surface/75 z-30 flex items-center justify-center animate-pulse text-accent">
+          <div className="absolute inset-0 z-30 flex items-start justify-center bg-[color-mix(in_srgb,var(--paper)_70%,transparent)] pt-10 text-sm text-muted">
             Loading...
           </div>
         )}
@@ -204,34 +207,36 @@ export default function DashboardPage() {
           onItemClick={openTask}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="k-dgrid">
           <AgendaPanel
             todayItems={panels.todayItems}
             weekItems={panels.weekItems}
             weekDays={WEEK_WINDOW_DAYS}
             {...common}
           />
-          <TaskListPanel
-            title="High Priority"
-            items={panels.high}
-            emptyMessage="No high priority tasks."
-            showDate
-            limit={PANEL_LIMIT}
-            viewAllTo="/tasks?priority=HIGH"
-            error={Boolean(data.failed.high)}
-            {...common}
-          />
-          <TaskListPanel
-            title="📌 Pinned"
-            items={panels.pinned}
-            emptyMessage="No pinned tasks. Use the 📌 button on any task to pin it."
-            showDate
-            limit={PANEL_LIMIT}
-            viewAllTo="/tasks?isPinned=true"
-            error={Boolean(data.failed.pinned)}
-            {...common}
-          />
-          <AnyTimePanel items={panels.anytime} error={Boolean(data.failed.anytime)} {...common} />
+          <div className="k-dcol">
+            <TaskListPanel
+              title="Pinned"
+              items={panels.pinned}
+              emptyMessage="No pinned tasks yet"
+              showDate
+              limit={PANEL_LIMIT}
+              viewAllTo="/tasks?isPinned=true"
+              error={Boolean(data.failed.pinned)}
+              {...common}
+            />
+            <TaskListPanel
+              title="High priority"
+              items={panels.high}
+              emptyMessage="No high priority tasks"
+              showDate
+              limit={PANEL_LIMIT}
+              viewAllTo="/tasks?priority=HIGH"
+              error={Boolean(data.failed.high)}
+              {...common}
+            />
+            <AnyTimePanel items={panels.anytime} error={Boolean(data.failed.anytime)} {...common} />
+          </div>
         </div>
       </div>
     </div>

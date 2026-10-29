@@ -20,41 +20,49 @@ export default function TaskListPanel({
 }) {
   const shown = limit ? items.slice(0, limit) : items;
   const hidden = items.length - shown.length;
+  const headingId = `panel-${title.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
-    <section className="ui-panel p-4 flex flex-col max-h-[420px]">
-      <h2 className="text-sm font-bold text-ink uppercase tracking-wider mb-3">
-        {title}
-        {items.length > 0 && <span className="ml-2 text-muted font-normal">({items.length})</span>}
-      </h2>
+    <section className="k-panel" aria-labelledby={headingId}>
+      <div className="k-ph">
+        <h3 id={headingId}>{title}</h3>
+        {items.length > 0 && <span className="k-cnt" aria-label={`${items.length} tasks`}>{items.length}</span>}
+      </div>
 
-      {error ? (
-        <p className="text-sm text-danger py-4 text-center">Could not load this list.</p>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-muted italic py-4 text-center">{emptyMessage}</p>
-      ) : (
-        <>
-          <ul className="flex flex-col gap-2 overflow-y-auto pr-1">
-            {shown.map((item) => (
-              <DashboardTaskItem
-                key={item.id}
-                item={item}
-                todayStr={todayStr}
-                timeFormat={timeFormat}
-                showDate={showDate}
-                onToggle={onToggle}
-                onTogglePin={onTogglePin}
-                onClick={onItemClick}
-              />
-            ))}
-          </ul>
-          {viewAllTo && hidden > 0 && (
-            <Link to={viewAllTo} className="mt-3 text-xs font-semibold text-link hover:text-accent self-start">
-              View all in the task list →
-            </Link>
-          )}
-        </>
-      )}
+      <div className="k-pb">
+        {error ? (
+          <div className="k-empty">
+            <h4>Could not load this list</h4>
+            <p>Try refreshing the page.</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="k-empty">
+            <h4>{emptyMessage}</h4>
+          </div>
+        ) : (
+          <>
+            <ul className="grid gap-[7px] p-0 m-0">
+              {shown.map((item) => (
+                <DashboardTaskItem
+                  key={item.id}
+                  item={item}
+                  todayStr={todayStr}
+                  timeFormat={timeFormat}
+                  showDate={showDate}
+                  onToggle={onToggle}
+                  onTogglePin={onTogglePin}
+                  onClick={onItemClick}
+                />
+              ))}
+            </ul>
+            {viewAllTo && hidden > 0 && (
+              <Link to={viewAllTo} className="k-link">
+                View all in the task list →
+              </Link>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

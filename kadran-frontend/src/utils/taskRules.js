@@ -69,11 +69,12 @@ export const PRIORITY_STYLE = {
   LOW: { icon: '↓', label: 'Low priority', frame: 'dashed' },
 };
 
+// Mirror of backend TYPE_DEFAULT_COLORS (config/colors.js) — keep both in sync.
 export const TYPE_COLORS = {
-  COURSE: '#3b82f6',
-  EXAM: '#ef4444',
-  HOMEWORK: '#22c55e',
-  CUSTOM: '#94a3b8',
+  COURSE: '#2463a6',
+  EXAM: '#c23b3b',
+  HOMEWORK: '#27864b',
+  CUSTOM: '#8a4fb0',
 };
 
 export const canRecur = (type, timeType) =>

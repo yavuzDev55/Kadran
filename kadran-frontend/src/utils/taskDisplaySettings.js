@@ -1,22 +1,19 @@
 import { TYPE_COLORS } from "./taskRules";
 
 const STORAGE_KEY = "kadran_task_display_settings";
-const DEFAULT_AVATAR_COLOR = "#3f6e7c";
+const DEFAULT_AVATAR_COLOR = "#2463a6";
 const HEX_COLOR_PATTERN = /^#[\da-f]{6}$/i;
 
+// Same palette as the task form and the backend (GET /meta/colors): the Design Tools reference.
 export const DISPLAY_COLOR_PALETTE = [
-  "#3b82f6",
-  "#ef4444",
-  "#22c55e",
-  "#94a3b8",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-  "#64748b",
-  "#06b6d4",
-  "#a3e635",
+  "#2463a6",
+  "#c23b3b",
+  "#27864b",
+  "#8a4fb0",
+  "#007c78",
+  "#d46a1f",
+  "#b12f72",
+  "#5d6675",
 ];
 
 export const getTaskDisplaySettings = () => {
@@ -50,7 +47,7 @@ export const saveTaskDisplaySettings = (settings) => {
 };
 
 export const getTaskTypeDisplayColor = (type) =>
-  getTaskDisplaySettings().taskColors[type] || TYPE_COLORS[type] || "#94a3b8";
+  getTaskDisplaySettings().taskColors[type] || TYPE_COLORS[type] || "#8a4fb0";
 
 export const getTaskDisplayColor = (task) => {
   if (task.color) return task.color;

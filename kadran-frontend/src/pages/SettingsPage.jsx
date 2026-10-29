@@ -7,6 +7,9 @@ import toast from "react-hot-toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
+import PasswordInput from "../components/ui/PasswordInput";
+import Segmented from "../components/ui/Segmented";
+import Slider from "../components/ui/Slider";
 import Switch from "../components/ui/Switch";
 import {
   DISPLAY_COLOR_PALETTE,
@@ -39,26 +42,60 @@ const readTheme = () => {
   }
 };
 
+const COMPACT_HOURS_STORAGE_KEY = "kadran_calendar_compact_hours";
+
+// Same default as the calendar page: compact unless it was switched off.
+const readCompactHours = () => {
+  try {
+    return localStorage.getItem(COMPACT_HOURS_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+};
+
+const formatHour = (hour) => `${String(hour).padStart(2, "0")}:00`;
+
+const THEME_OPTIONS = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+];
+const WEEK_START_OPTIONS = [
+  { value: "MONDAY", label: "Monday" },
+  { value: "SUNDAY", label: "Sunday" },
+];
+const TIME_FORMAT_OPTIONS = [
+  { value: "H24", label: "24-hour" },
+  { value: "H12", label: "12-hour" },
+];
+const VIEW_OPTIONS = [
+  { value: "WEEK", label: "Week" },
+  { value: "MONTH", label: "Month" },
+];
+
 export default function SettingsPage() {
   const { user, logout, updateUser } = useAuth();
 
   const [theme, setTheme] = useState(readTheme);
   const [timeZone,      setTimeZone]      = useState(user?.timeZone      || "Europe/Istanbul");
   const [weekStartsOn,  setWeekStartsOn]  = useState(user?.weekStartsOn  || "MONDAY");
-  const [dayStartHour,  setDayStartHour]  = useState(user?.dayStartHour  ?? 8);
-  const [dayEndHour,    setDayEndHour]    = useState(user?.dayEndHour     ?? 22);
+  const [dayStartHour,  setDayStartHour]  = useState(Number(user?.dayStartHour ?? 8));
+  const [dayEndHour,    setDayEndHour]    = useState(Number(user?.dayEndHour ?? 22));
   const [timeFormat,    setTimeFormat]    = useState(user?.timeFormat     || "H24");
   const [defaultView,   setDefaultView]   = useState(user?.defaultView    || "WEEK");
   const [hideCompleted, setHideCompleted] = useState(user?.hideCompleted  || false);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [headline, setHeadline] = useState(user?.headline || "");
-  const [displaySettings, setDisplaySettings] = useState(getTaskDisplaySettings);
+  const [avatarColor, setAvatarColor] = useState(() => getTaskDisplaySettings().avatarColor);
+  const [taskColors, setTaskColors] = useState(() => getTaskDisplaySettings().taskColors);
+  const [compactHours, setCompactHours] = useState(readCompactHours);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [deletePassword,  setDeletePassword]  = useState("");
 
   const [savingProfile,  setSavingProfile]  = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -83,34 +120,74 @@ export default function SettingsPage() {
     window.dispatchEvent(new CustomEvent("kadran-theme-change", { detail: nextTheme }));
   };
 
+  // Browser-local display settings are written through to the stored copy, so changing one
+  // never persists an unsaved change to another (e.g. an avatar color that was not saved yet).
+  const persistDisplaySettings = (changes) => {
+    try {
+      saveTaskDisplaySettings({ ...getTaskDisplaySettings(), ...changes });
+      window.dispatchEvent(new Event("kadran-display-settings-change"));
+      return true;
+    } catch {
+      toast.error("This choice could not be saved in this browser.");
+      return false;
+    }
+  };
+
+  const handleTaskColorChange = (typeId, color) => {
+    const next = { ...taskColors, [typeId]: color };
+    setTaskColors(next);
+    persistDisplaySettings({ taskColors: next });
+  };
+
+  const handleCompactHoursChange = (compact) => {
+    setCompactHours(compact);
+    try {
+      localStorage.setItem(COMPACT_HOURS_STORAGE_KEY, String(compact));
+    } catch {
+      toast.error("This choice could not be saved in this browser.");
+    }
+  };
+
+  const handleDiscardProfile = () => {
+    setDisplayName(user?.displayName || "");
+    setHeadline(user?.headline || "");
+    setAvatarColor(getTaskDisplaySettings().avatarColor);
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSavingProfile(true);
     try {
+      const res = await api.patch("/auth/me", { displayName, headline });
+      updateUser(res.data.data);
+      persistDisplaySettings({ avatarColor });
+      toast.success("Profile saved.");
+    } catch (err) {
+      toast.error(err.response?.data?.error?.message || "Failed to save profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleSavePreferences = async (e) => {
+    e.preventDefault();
+    setSavingPreferences(true);
+    try {
       const res = await api.patch("/auth/me", {
-        displayName,
-        headline,
         timeZone,
         weekStartsOn,
-        dayStartHour: Number(dayStartHour),
-        dayEndHour:   Number(dayEndHour),
+        dayStartHour,
+        dayEndHour,
         timeFormat,
         defaultView,
         hideCompleted,
       });
       updateUser(res.data.data);
-      try {
-        saveTaskDisplaySettings(displaySettings);
-        window.dispatchEvent(new Event("kadran-display-settings-change"));
-      } catch {
-        toast.error("Task and avatar colors could not be saved in this browser.");
-      }
-      toast.success("Preferences saved successfully.");
+      toast.success("Preferences saved.");
     } catch (err) {
-      const msg = err.response?.data?.error?.message || "Failed to save preferences.";
-      toast.error(msg);
+      toast.error(err.response?.data?.error?.message || "Failed to save preferences.");
     } finally {
-      setSavingProfile(false);
+      setSavingPreferences(false);
     }
   };
 
@@ -156,76 +233,125 @@ export default function SettingsPage() {
     }
   };
 
+  const initial = (displayName || user?.email || "U").trim().charAt(0).toUpperCase();
+
   return (
-    <div className="max-w-3xl mx-auto mt-8 p-4 mb-20">
-      <h1 className="font-title text-3xl font-normal text-ink mb-6">Profile & Settings</h1>
+    <div className="settings-page">
+      <h1 className="font-title text-[34px] font-normal leading-[1.05] text-ink">Settings</h1>
 
-      <div className="flex flex-col gap-6">
-
-        {/* Preferences */}
-        <div className="ui-panel">
-          <div className="ui-panel__heading">
-            <h2 className="text-lg font-semibold text-ink">Profile & preferences</h2>
-            <p className="mt-1 text-xs text-muted">Your profile, calendar display and regional settings</p>
-          </div>
-          <form onSubmit={handleSaveProfile} className="p-4 flex flex-col gap-4">
-
-            <div>
-              <h3 className="text-sm font-semibold text-ink mb-3">Personal profile</h3>
-              <div className="flex flex-col gap-4">
-                <Field label="Avatar color" hint="Used for your initials in the navigation. Saved in this browser.">
-                  <div className="flex flex-wrap gap-2">
-                    {DISPLAY_COLOR_PALETTE.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        aria-label={`Set avatar color ${color}`}
-                        aria-pressed={displaySettings.avatarColor === color}
-                        onClick={() =>
-                          setDisplaySettings((current) => ({ ...current, avatarColor: color }))
-                        }
-                        className={`h-7 w-7 rounded-full border-2 transition ${
-                          displaySettings.avatarColor === color
-                            ? "border-ink scale-110"
-                            : "border-transparent hover:border-ink"
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </Field>
-                <Field label="Display name" hint="Up to 50 characters.">
-                  <input
-                    type="text"
-                    value={displayName}
-                    maxLength={50}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="How should we address you?"
-                    className="ui-field__control"
-                  />
-                </Field>
-                <Field label="Headline" hint="Optional, up to 80 characters.">
-                  <input
-                    type="text"
-                    value={headline}
-                    maxLength={80}
-                    onChange={(e) => setHeadline(e.target.value)}
-                    placeholder="e.g. Computer Science, Year 3"
-                    className="ui-field__control"
-                  />
-                </Field>
+      {/* Profile */}
+      <section className="settings-sec" aria-labelledby="settings-profile">
+        <div className="settings-sec__head">
+          <h2 id="settings-profile">Profile</h2>
+        </div>
+        <div className="settings-sec__body">
+          <form onSubmit={handleSaveProfile} className="k-sgrid">
+            <div className="k-who">
+              <span className="me-av k-av--lg" style={{ "--c": avatarColor }} aria-hidden="true">
+                {initial}
+              </span>
+              <div>
+                <div className="k-sub">Avatar color</div>
+                <div className="k-colors">
+                  {DISPLAY_COLOR_PALETTE.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="k-cdot"
+                      style={{ "--c": color }}
+                      aria-label={`Set avatar color ${color}`}
+                      aria-pressed={avatarColor === color}
+                      onClick={() => setAvatarColor(color)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
-
-            <Field label="Email address" hint="Email cannot be changed.">
+            <Field label="Display name" hint="Up to 50 characters.">
               <input
-                type="email"
-                value={user?.email || ""}
-                disabled
+                type="text"
+                value={displayName}
+                maxLength={50}
+                autoComplete="nickname"
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="How should we address you?"
                 className="ui-field__control"
               />
             </Field>
+            <Field label="Headline" hint={`Optional. ${headline.length}/80`}>
+              <input
+                type="text"
+                value={headline}
+                maxLength={80}
+                onChange={(e) => setHeadline(e.target.value)}
+                placeholder="For example: CS student, year 2"
+                className="ui-field__control"
+              />
+            </Field>
+            <div className="k-savebar">
+              <Button type="submit" variant="primary" disabled={savingProfile}>
+                {savingProfile ? "Saving..." : "Save profile"}
+              </Button>
+              <Button type="button" onClick={handleDiscardProfile}>
+                Discard
+              </Button>
+            </div>
+          </form>
+        </div>
+      </section>
 
+      {/* Appearance: browser-local, applied immediately */}
+      <section className="settings-sec" aria-labelledby="settings-appearance">
+        <div className="settings-sec__head">
+          <h2 id="settings-appearance">Appearance</h2>
+        </div>
+        <div className="settings-sec__body">
+          <div className="k-sgrid">
+            <div>
+              <div className="k-rowset">
+                <span>Theme</span>
+                <Segmented label="Theme" options={THEME_OPTIONS} value={theme} onChange={handleThemeChange} />
+              </div>
+              <div className="k-rowset">
+                <Switch
+                  label="Compact empty hours in the week calendar"
+                  checked={compactHours}
+                  onChange={handleCompactHoursChange}
+                />
+              </div>
+              <p className="ui-field__hint">These choices are saved in this browser and apply immediately.</p>
+            </div>
+            <div>
+              <div className="k-sub">Default task colors</div>
+              {TASK_TYPES.map((type) => (
+                <div key={type.id} className="k-catrow">
+                  <span
+                    className={`k-sw k-ty-${type.id.toLowerCase()} k-fill`}
+                    style={{ "--c": taskColors[type.id] }}
+                    aria-hidden="true"
+                  />
+                  <span className="k-catrow__name">{type.label}</span>
+                  <input
+                    type="color"
+                    value={taskColors[type.id]}
+                    aria-label={`${type.label} default color`}
+                    onChange={(event) => handleTaskColorChange(type.id, event.target.value)}
+                    className="k-colorin"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Calendar and region */}
+      <section className="settings-sec" aria-labelledby="settings-calendar">
+        <div className="settings-sec__head">
+          <h2 id="settings-calendar">Calendar</h2>
+        </div>
+        <div className="settings-sec__body">
+          <form onSubmit={handleSavePreferences} className="k-sgrid">
             <Field label="Time zone">
               <select value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className="ui-field__control">
                 {TIMEZONES.map((tz) => (
@@ -233,162 +359,112 @@ export default function SettingsPage() {
                 ))}
               </select>
             </Field>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Week starts on">
-                <select value={weekStartsOn} onChange={(e) => setWeekStartsOn(e.target.value)} className="ui-field__control">
-                  <option value="MONDAY">Monday</option>
-                  <option value="SUNDAY">Sunday</option>
-                </select>
-              </Field>
-              <Field label="Time format">
-                <select value={timeFormat} onChange={(e) => setTimeFormat(e.target.value)} className="ui-field__control">
-                  <option value="H24">24-hour</option>
-                  <option value="H12">12-hour</option>
-                </select>
-              </Field>
+            <div className="k-rowset">
+              <span>Week starts on</span>
+              <Segmented label="Week starts on" options={WEEK_START_OPTIONS} value={weekStartsOn} onChange={setWeekStartsOn} />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Calendar start hour">
-                <input type="number" min="0" max="23" value={dayStartHour}
-                  onChange={(e) => setDayStartHour(e.target.value)}
-                  className="ui-field__control"
-                />
-              </Field>
-              <Field label="Calendar end hour">
-                <input type="number" min="1" max="24" value={dayEndHour}
-                  onChange={(e) => setDayEndHour(e.target.value)}
-                  className="ui-field__control"
-                />
-              </Field>
+            <div className="k-rowset">
+              <span>Time format</span>
+              <Segmented label="Time format" options={TIME_FORMAT_OPTIONS} value={timeFormat} onChange={setTimeFormat} />
             </div>
-
-            <Field label="Default calendar view">
-              <select value={defaultView} onChange={(e) => setDefaultView(e.target.value)} className="ui-field__control">
-                <option value="WEEK">Weekly</option>
-                <option value="MONTH">Monthly</option>
-              </select>
-            </Field>
-
+            <div className="k-rowset">
+              <span>Default view</span>
+              <Segmented label="Default calendar view" options={VIEW_OPTIONS} value={defaultView} onChange={setDefaultView} />
+            </div>
+            {/* Each handle is limited by the other, so "end after start" always holds. */}
+            <Slider
+              label="Day starts at"
+              min={0}
+              max={dayEndHour - 1}
+              value={dayStartHour}
+              onChange={setDayStartHour}
+              formatValue={formatHour}
+            />
+            <Slider
+              label="Day ends at"
+              min={dayStartHour + 1}
+              max={24}
+              value={dayEndHour}
+              onChange={setDayEndHour}
+              formatValue={formatHour}
+            />
             <Switch
               label="Hide completed tasks by default"
               checked={hideCompleted}
               onChange={setHideCompleted}
             />
-
-            <div className="border-t border-border/20 pt-4">
-              <h3 className="text-sm font-semibold text-ink mb-1">Default task colors</h3>
-              <p className="text-xs text-muted mb-3">
-                Used when a task has no custom color. These choices are saved in this browser.
-              </p>
-              <div className="flex flex-col gap-2">
-                {TASK_TYPES.map((type) => (
-                  <label key={type.id} className="flex items-center justify-between gap-3 text-sm text-ink">
-                    <span>{type.label}</span>
-                    <input
-                      type="color"
-                      value={displaySettings.taskColors[type.id]}
-                      aria-label={`${type.label} default color`}
-                      onChange={(event) =>
-                        setDisplaySettings((current) => ({
-                          ...current,
-                          taskColors: { ...current.taskColors, [type.id]: event.target.value },
-                        }))
-                      }
-                      className="h-9 w-12 cursor-pointer rounded border border-border/20 bg-surface p-1"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-1">
-              <Button type="submit" variant="primary" disabled={savingProfile}>
-                {savingProfile ? "Saving..." : "Save profile & preferences"}
+            <div className="k-savebar">
+              <Button type="submit" variant="primary" disabled={savingPreferences}>
+                {savingPreferences ? "Saving..." : "Save preferences"}
               </Button>
             </div>
           </form>
-          <div className="border-t border-border/20 p-4">
-            <Field label="Theme" hint="Saved only in this browser.">
-              <select value={theme} onChange={(event) => handleThemeChange(event.target.value)} className="ui-field__control">
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">System</option>
-              </select>
-            </Field>
-          </div>
         </div>
+      </section>
 
-        {/* Security */}
-        <div className="ui-panel">
-          <div className="ui-panel__heading">
-            <h2 className="text-lg font-semibold text-ink">Security</h2>
-            <p className="mt-1 text-xs text-muted">Change your password</p>
-          </div>
-          <form onSubmit={handleChangePassword} className="p-4 flex flex-col gap-4">
+      {/* Security */}
+      <section className="settings-sec" aria-labelledby="settings-security">
+        <div className="settings-sec__head">
+          <h2 id="settings-security">Security</h2>
+        </div>
+        <div className="settings-sec__body">
+          <form onSubmit={handleChangePassword} className="k-sgrid">
             <Field label="Current password">
-              <input type="password" value={currentPassword} required
+              <PasswordInput
+                value={currentPassword}
+                required
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
                 autoComplete="current-password"
-                className="ui-field__control"
               />
             </Field>
-            <Field label="New password">
-              <input type="password" value={newPassword} required
+            <Field label="New password" hint="At least 8 characters, with an uppercase letter and a number.">
+              <PasswordInput
+                value={newPassword}
+                required
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min 8 chars, 1 uppercase, 1 number"
                 autoComplete="new-password"
-                className="ui-field__control"
               />
             </Field>
-            <div>
+            <div className="k-savebar">
               <Button type="submit" disabled={savingPassword}>
-                {savingPassword ? "Updating..." : "Update Password"}
+                {savingPassword ? "Updating..." : "Change password"}
               </Button>
             </div>
           </form>
         </div>
+      </section>
 
-        {/* Danger Zone */}
-        <div className="overflow-hidden rounded-lg border border-danger/35 bg-surface">
-          <div className="border-b border-danger/20 bg-danger/5 p-4">
-            <h2 className="text-lg font-semibold text-danger">Danger zone</h2>
-            <p className="text-xs text-danger/75">Irreversible account actions</p>
-          </div>
-
-          <div className="p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-ink">Log out</h3>
-              <p className="text-xs text-muted">Safely end your current session.</p>
+      {/* Account */}
+      <section className="settings-sec" aria-labelledby="settings-account">
+        <div className="settings-sec__head">
+          <h2 id="settings-account">Account</h2>
+        </div>
+        <div className="settings-sec__body">
+          <div className="k-sgrid">
+            <Field label="Email" hint="Your email cannot be changed.">
+              <input type="email" value={user?.email || ""} readOnly aria-readonly="true" className="ui-field__control" />
+            </Field>
+            <div className="k-savebar">
+              <Button onClick={logout}>Log out</Button>
             </div>
-            <Button onClick={logout}>Log out now</Button>
-          </div>
-
-          <div className="p-4 border-t border-danger/20 flex flex-col gap-3">
-            <div>
-              <h3 className="text-sm font-bold text-danger">Delete account</h3>
-              <p className="text-xs text-muted">
-                Permanently delete your account and all tasks. Enter your password to confirm.
-              </p>
-            </div>
-            <input type="password" value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              placeholder="Enter password to confirm"
-              autoComplete="current-password"
-              aria-label="Password to confirm account deletion"
-              className="ui-input max-w-xs"
-            />
-            <div>
+            <div className="k-zone">
+              <p>Deleting your account removes all tasks. This can&apos;t be undone.</p>
+              <PasswordInput
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Enter password to confirm"
+                autoComplete="current-password"
+                aria-label="Password to confirm account deletion"
+              />
               <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={deletingAccount}>
                 {deletingAccount ? "Deleting..." : "Delete account"}
               </Button>
             </div>
           </div>
         </div>
+      </section>
 
-      </div>
       <ConfirmDialog
         open={confirmDelete}
         title="Delete your account?"

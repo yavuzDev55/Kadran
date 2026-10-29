@@ -1,4 +1,7 @@
 import { WEEKDAYS } from "../../utils/dateUtils";
+import Switch from "../ui/Switch";
+import ClockTimeInput from "./ClockTimeInput";
+import DatePicker from "./DatePicker";
 
 const DAY_LABELS = {
   MONDAY: "Monday",
@@ -32,15 +35,11 @@ export default function TaskRecurrenceFields({
 }) {
   return (
     <div className="border-t border-border/20 pt-3 mt-1 flex flex-col gap-3">
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={form.recurring}
-          onChange={(e) => set({ recurring: e.target.checked })}
-          className="w-4 h-4 accent-accent"
-        />
-        <span className="text-sm font-semibold text-ink">Repeat this task</span>
-      </label>
+      <Switch
+        label="Repeat this task"
+        checked={form.recurring}
+        onChange={(recurring) => set({ recurring })}
+      />
 
       {form.recurring && (
         <div className="flex flex-col gap-4 p-3 bg-surface-muted rounded border border-border/20">
@@ -59,22 +58,20 @@ export default function TaskRecurrenceFields({
               </select>
             </Field>
             <Field label="First day *">
-              <input
-                type="date"
+              <DatePicker
+                label="First day"
                 value={form.recStart}
-                onChange={(e) => set({ recStart: e.target.value })}
-                className={smallInputClass}
+                onChange={(recStart) => set({ recStart })}
                 required
               />
             </Field>
             <Field label="Last day *" hint="At most 1 year after the first day.">
-              <input
-                type="date"
+              <DatePicker
+                label="Last day"
                 value={form.recEnd}
                 min={form.recStart || undefined}
                 max={recurrenceMax}
-                onChange={(e) => set({ recEnd: e.target.value })}
-                className={smallInputClass}
+                onChange={(recEnd) => set({ recEnd })}
                 required
               />
             </Field>
@@ -100,21 +97,19 @@ export default function TaskRecurrenceFields({
           {form.timeType !== "DEADLINE" && (
             <div className="grid grid-cols-2 gap-4">
               <Field label={form.pattern === "WEEKLY" ? "Default start time *" : "Start time *"}>
-                <input
-                  type="time"
+                <ClockTimeInput
+                  label={form.pattern === "WEEKLY" ? "Default start time" : "Start time"}
                   value={form.startTime}
-                  onChange={(e) => set({ startTime: e.target.value })}
-                  className={smallInputClass}
+                  onChange={(startTime) => set({ startTime })}
                   required={form.pattern !== "WEEKLY"}
                 />
               </Field>
               {form.timeType === "TIMED" && (
                 <Field label={form.pattern === "WEEKLY" ? "Default end time *" : "End time *"}>
-                  <input
-                    type="time"
+                  <ClockTimeInput
+                    label={form.pattern === "WEEKLY" ? "Default end time" : "End time"}
                     value={form.endTime}
-                    onChange={(e) => set({ endTime: e.target.value })}
-                    className={smallInputClass}
+                    onChange={(endTime) => set({ endTime })}
                     required={form.pattern !== "WEEKLY"}
                   />
                 </Field>
@@ -146,21 +141,17 @@ export default function TaskRecurrenceFields({
               {form.weekDays.map((day) => (
                 <div key={day} className="grid grid-cols-1 sm:grid-cols-[90px_1fr_1fr] items-center gap-2">
                   <span className="text-xs text-muted">{DAY_LABELS[day]}</span>
-                  <input
-                    type="time"
+                  <ClockTimeInput
+                    label={`${DAY_LABELS[day]} start time`}
                     value={form.slots[day]?.startTime || ""}
-                    onChange={(e) => onSetSlot(day, { startTime: e.target.value })}
-                    aria-label={`${DAY_LABELS[day]} start time`}
-                    className={smallInputClass}
+                    onChange={(startTime) => onSetSlot(day, { startTime })}
                     required
                   />
                   {form.timeType === "TIMED" ? (
-                    <input
-                      type="time"
+                    <ClockTimeInput
+                      label={`${DAY_LABELS[day]} end time`}
                       value={form.slots[day]?.endTime || ""}
-                      onChange={(e) => onSetSlot(day, { endTime: e.target.value })}
-                      aria-label={`${DAY_LABELS[day]} end time`}
-                      className={smallInputClass}
+                      onChange={(endTime) => onSetSlot(day, { endTime })}
                       required
                     />
                   ) : (

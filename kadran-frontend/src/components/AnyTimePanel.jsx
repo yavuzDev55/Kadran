@@ -27,7 +27,7 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
   const filtered = needle ? items.filter((item) => item.title.toLowerCase().includes(needle)) : items;
 
   const renderList = (list, className) => (
-    <ul className={`flex flex-col gap-2 overflow-y-auto pr-1 ${className}`}>
+    <ul className={`grid gap-[7px] overflow-y-auto p-0 m-0 ${className}`}>
       {list.map((item) => (
         <DashboardTaskItem
           key={item.id}
@@ -43,41 +43,41 @@ export default function AnyTimePanel({ items, error = false, timeFormat, todaySt
   );
 
   return (
-    <section className="ui-panel p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <h2 className="anytime-heading text-sm font-bold text-ink uppercase tracking-wider">
-          Any time
-          {items.length > 0 && <span className="ml-2 text-muted font-normal">({items.length})</span>}
-        </h2>
+    <section className="k-panel" aria-labelledby="anytime-heading">
+      <div className="k-ph">
+        <h3 id="anytime-heading">Any time</h3>
         {items.length > MODAL_THRESHOLD && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="text-xs font-semibold text-link hover:text-accent"
-          >
+          <button type="button" onClick={() => setOpen(true)} className="k-link">
             Show all →
           </button>
         )}
+        {items.length > 0 && <span className="k-cnt" aria-label={`${items.length} tasks`}>{items.length}</span>}
       </div>
 
-      {error ? (
-        <p className="text-sm text-danger py-4 text-center">Could not load this list.</p>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-muted italic py-4 text-center">No any-time tasks.</p>
-      ) : (
-        <>
-          {items.length > 3 && (
-            <div className="mb-2">
-              <SearchBox value={query} onChange={setQuery} />
-            </div>
-          )}
-          {filtered.length === 0 ? (
-            <p className="text-sm text-muted italic py-4 text-center">No match.</p>
-          ) : (
-            renderList(filtered, "max-h-64")
-          )}
-        </>
-      )}
+      <div className="k-pb">
+        {error ? (
+          <div className="k-empty">
+            <h4>Could not load this list</h4>
+            <p>Try refreshing the page.</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="k-empty">
+            <h4>No any-time tasks</h4>
+            <p>Tasks without a date or time are kept here.</p>
+          </div>
+        ) : (
+          <>
+            {items.length > 3 && <SearchBox value={query} onChange={setQuery} />}
+            {filtered.length === 0 ? (
+              <div className="k-empty">
+                <h4>No match</h4>
+              </div>
+            ) : (
+              renderList(filtered, "max-h-64")
+            )}
+          </>
+        )}
+      </div>
 
       {open && (
         <div

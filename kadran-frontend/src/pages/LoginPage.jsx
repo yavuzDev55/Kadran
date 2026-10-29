@@ -7,6 +7,7 @@ import * as z from "zod";
 import AuthShell from "../components/AuthShell";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
+import PasswordInput from "../components/ui/PasswordInput";
 import { getAuthErrorMessage } from "../utils/authErrorMessage";
 
 // Define validation rules using Zod
@@ -43,8 +44,8 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Welcome back"
-      lead="Sign in to pick up where your week left off."
-      alternateLabel="New to Kadran?"
+      lead="Sign in to see your week."
+      alternateLabel="New here?"
       alternateTo="/register"
       alternateAction="Create an account"
     >
@@ -64,15 +65,10 @@ export default function LoginPage() {
           />
         </Field>
         <Field label="Password" error={errors.password?.message}>
-          <input
-            type="password"
-            autoComplete="current-password"
-            className="ui-field__control"
-            {...register("password")}
-          />
+          <PasswordInput autoComplete="current-password" {...register("password")} />
         </Field>
         <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Signing in..." : "Sign In"}
+          {isSubmitting ? "Signing in..." : "Sign in"}
         </Button>
       </form>
     </AuthShell>

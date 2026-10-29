@@ -7,9 +7,10 @@ const timeValue = (hours, minutes) => `${pad(hours)}:${pad(minutes)}`;
 export default function ClockTimeInput({ value, onChange, label, required = false }) {
   const [open, setOpen] = useState(false);
   const [part, setPart] = useState("hour");
-  const [rawHours, rawMinutes] = (value || "09:00").split(":").map(Number);
+  const [rawHours, rawMinutes] = (value || "").split(":").map(Number);
   const hours = Number.isFinite(rawHours) ? rawHours : 9;
   const minutes = Number.isFinite(rawMinutes) ? rawMinutes : 0;
+  const isValidTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(value || "");
   const options = part === "hour"
     ? Array.from({ length: 24 }, (_, hour) => ({
         value: hour,
@@ -29,6 +30,7 @@ export default function ClockTimeInput({ value, onChange, label, required = fals
     } else {
       onChange(timeValue(hours, selected));
       setPart("hour");
+      setOpen(false);
     }
   };
 
@@ -36,10 +38,15 @@ export default function ClockTimeInput({ value, onChange, label, required = fals
     <div className="relative">
       <div className="flex items-center gap-2">
         <input
-          type="time"
+          type="text"
+          inputMode="numeric"
           value={value}
           required={required}
+          pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
           aria-label={label}
+          aria-invalid={Boolean(value) && !isValidTime}
+          placeholder="HH:MM"
+          maxLength={5}
           onChange={(event) => onChange(event.target.value)}
           className="clock-time-input"
         />
@@ -98,7 +105,7 @@ export default function ClockTimeInput({ value, onChange, label, required = fals
               {pad(minutes)}
             </button>
           </div>
-          <p className="clock-time-manual">Choose a time on the dial or use the time field.</p>
+          <p className="clock-time-manual">Choose a time on the dial or type it in as HH:MM.</p>
           <button type="button" className="ui-button ui-button--sm" onClick={() => setOpen(false)}>
             Done
           </button>

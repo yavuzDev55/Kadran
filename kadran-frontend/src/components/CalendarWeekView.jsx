@@ -8,7 +8,16 @@
 import CalendarEventCard from "./CalendarEventCard";
 import CalendarSpanBar from "./CalendarSpanBar";
 import { useEffect, useRef, useState } from "react";
-import { MARKER_MINUTES, layoutDayEvents, minuteForY, placeSpans, yForMinute } from "../utils/calendarUtils";
+import {
+  MARKER_MINUTES,
+  isLineEvent,
+  layoutDayEvents,
+  minuteForY,
+  placeSpans,
+  spreadLinesByMinute,
+  yForMinute,
+} from "../utils/calendarUtils";
+import CalendarTimeLine from "./CalendarTimeLine";
 import { getWeekDayLabels, parseDate } from "../utils/dateUtils";
 import { formatHourLabel } from "../utils/formatTime";
 
@@ -60,6 +69,7 @@ export default function CalendarWeekView({
   weekStartsOn = "MONDAY",
   timeFormat = "H24",
   compactEmptyHours = true,
+  nowMinutes = null,
 }) {
   const dayLabels = getWeekDayLabels(weekStartsOn);
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia("(max-width: 760px)").matches);
@@ -282,12 +292,11 @@ export default function CalendarWeekView({
                   </button>
                 )}
 
-                {layoutDayEvents(visible).map((event) => {
+                {layoutDayEvents(visible.filter((event) => !isLineEvent(event))).map((event) => {
                   const eventEnd = event.anchorMinutes + Math.max(event.durationMinutes, MARKER_MINUTES);
                   const top = yForMinute(event.anchorMinutes, hourHeights, startMin, endMin);
                   const bottom = yForMinute(eventEnd, hourHeights, startMin, endMin);
                   const height = Math.max(bottom - top, MIN_BLOCK_HEIGHT);
-                  const isMarker = event.durationMinutes === 0;
 
                   return (
                     <div
@@ -305,11 +314,32 @@ export default function CalendarWeekView({
                         onClick={onEventClick}
                         onToggle={onToggle}
                         timeFormat={timeFormat}
-                        variant={isMarker ? "marker" : "block"}
+                        variant="block"
                       />
                     </div>
                   );
                 })}
+
+                {spreadLinesByMinute(visible.filter(isLineEvent)).map(({ event, index, count }) => (
+                  <CalendarTimeLine
+                    key={event.id}
+                    event={event}
+                    top={yForMinute(event.anchorMinutes, hourHeights, startMin, endMin)}
+                    index={index}
+                    count={count}
+                    onClick={onEventClick}
+                    onToggle={onToggle}
+                    timeFormat={timeFormat}
+                  />
+                ))}
+
+                {dateStr === today && nowMinutes !== null && nowMinutes >= startMin && nowMinutes <= endMin && (
+                  <div
+                    className="now-line"
+                    aria-hidden="true"
+                    style={{ top: `${yForMinute(nowMinutes, hourHeights, startMin, endMin)}px` }}
+                  />
+                )}
 
                 {after.length > 0 && (
                   <button

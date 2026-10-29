@@ -7,6 +7,7 @@ import api from "../services/api";
 import AuthShell from "../components/AuthShell";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
+import PasswordInput from "../components/ui/PasswordInput";
 import { getAuthErrorMessage } from "../utils/authErrorMessage";
 
 // Map backend validation rules directly to Zod schema
@@ -79,12 +80,7 @@ export default function RegisterPage() {
           hint="At least 8 characters, including an uppercase letter and a number."
           error={errors.password?.message}
         >
-          <input
-            type="password"
-            autoComplete="new-password"
-            className="ui-field__control"
-            {...register("password")}
-          />
+          <PasswordInput autoComplete="new-password" {...register("password")} />
         </Field>
         <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" disabled={isSubmitting}>
           {isSubmitting ? "Creating account..." : "Create Account"}

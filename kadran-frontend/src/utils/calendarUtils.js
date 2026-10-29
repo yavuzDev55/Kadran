@@ -24,7 +24,7 @@ const baseEvent = (task, date) => ({
   isCompleted: Boolean(task.isCompleted),
   isCompletable: task.isCompletable !== false,
   isPinned: Boolean(task.isPinned),
-  effectiveColor: task.effectiveColor || task.color || '#94a3b8',
+  effectiveColor: task.effectiveColor || task.color || '#8a4fb0',
   date,
   startTime: task.startTime || null,
   endTime: task.endTime || null,
@@ -192,4 +192,30 @@ export const minuteForY = (position, hourHeights, startMin, endMin) => {
     offset += height;
   }
   return startMin;
+};
+
+// ─── Time lines (OPEN_ENDED / DEADLINE) ───────────────────────────────────────
+// A task with only a start (open-ended) or only a due time (deadline) has no duration, so the
+// week grid draws it as a line at that minute instead of a block. Lines sit on top of timed
+// blocks and never take part in the side-by-side lane layout, so timed blocks keep full width.
+
+export const isLineEvent = (event) => event.timeType === 'OPEN_ENDED' || event.timeType === 'DEADLINE';
+
+/**
+ * Lines at the same minute would draw their labels on top of each other. Each gets a slot
+ * (`index` of `count`) so its label can be shifted sideways.
+ */
+export const spreadLinesByMinute = (lines) => {
+  const byMinute = new Map();
+  lines.forEach((event) => {
+    if (!byMinute.has(event.anchorMinutes)) byMinute.set(event.anchorMinutes, []);
+    byMinute.get(event.anchorMinutes).push(event);
+  });
+
+  const spread = [];
+  byMinute.forEach((group) => {
+    group.sort((a, b) => (a.taskId ?? 0) - (b.taskId ?? 0));
+    group.forEach((event, index) => spread.push({ event, index, count: group.length }));
+  });
+  return spread;
 };

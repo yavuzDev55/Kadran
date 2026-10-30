@@ -21,6 +21,7 @@ import ActiveTaskPanel from "../components/ActiveTaskPanel";
 import AgendaPanel from "../components/AgendaPanel";
 import AnyTimePanel from "../components/AnyTimePanel";
 import TaskListPanel from "../components/TaskListPanel";
+import { getPageData, setPageData } from "../utils/pageDataCache";
 
 const CLOCK_TICK_MS = 30 * 1000;
 const WEEK_WINDOW_DAYS = 7;
@@ -52,7 +53,8 @@ export default function DashboardPage() {
 
   const [now, setNow] = useState(() => new Date());
   const [reloadTick, setReloadTick] = useState(0);
-  const [data, setData] = useState(EMPTY_DATA);
+  const cacheKey = `dashboard:${user?.id || "anonymous"}`;
+  const [data, setData] = useState(() => getPageData(cacheKey) || EMPTY_DATA);
 
   // Keeps "today" and the active tasks fresh without reloading the page
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function DashboardPage() {
   const weekEnd = addDays(todayStr, WEEK_WINDOW_DAYS - 1);
 
   // New data when the day changes or after a pin change; "loading" = data is for another key
-  const loadKey = `${todayStr}|${reloadTick}`;
+  const loadKey = `${cacheKey}|${todayStr}|${reloadTick}`;
   const loading = data.key !== loadKey;
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function DashboardPage() {
         else next.failed[name] = true;
       });
       if (Object.keys(next.failed).length === names.length) toast.error("Failed to load tasks");
+      setPageData(cacheKey, next);
       setData(next);
     };
 
@@ -96,7 +99,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadKey, todayStr, weekEnd]);
+  }, [loadKey, todayStr, weekEnd, cacheKey]);
 
   const panels = useMemo(() => {
     const keep = (item) => !(hideCompleted && item.isCompleted);
@@ -192,7 +195,7 @@ export default function DashboardPage() {
       </header>
 
       <div className="relative grid gap-5" aria-busy={loading}>
-        {loading && (
+        {loading && data.key === null && (
           <div className="absolute inset-0 z-30 flex items-start justify-center bg-[color-mix(in_srgb,var(--paper)_70%,transparent)] pt-10 text-sm text-muted">
             Loading...
           </div>

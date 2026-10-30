@@ -15,6 +15,7 @@ import { formatTaskTime } from "../utils/formatTime";
 import { getTodayInTimezone, sliceDate } from "../utils/dateUtils";
 import { TASK_TYPES } from "../utils/taskRules";
 import { getTaskDisplayColor } from "../utils/taskDisplaySettings";
+import { getPageData, setPageData } from "../utils/pageDataCache";
 
 const PAGE_SIZE = 50;
 const FILTER_DEBOUNCE_MS = 250;
@@ -148,11 +149,13 @@ export default function TasksPage() {
   const { user } = useAuth();
   const timeZone = user?.timeZone || "Europe/Istanbul";
   const timeFormat = user?.timeFormat || "H24";
+  const cacheKey = `tasks:${user?.id || "anonymous"}`;
+  const cachedData = getPageData(cacheKey);
 
   const [filters, setFilters] = useState(() => filtersFromSearch(searchParams));
-  const [tasks, setTasks] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const [tasks, setTasks] = useState(() => cachedData?.tasks || []);
+  const [total, setTotal] = useState(() => cachedData?.total || 0);
+  const [hasMore, setHasMore] = useState(() => Boolean(cachedData?.hasMore));
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
@@ -230,8 +233,11 @@ export default function TasksPage() {
         const res = await api.get("/tasks", { params: buildParams(0) });
         if (id !== requestId.current) return;
         setTasks(res.data.data || []);
-        setTotal(res.data.meta?.total ?? 0);
-        setHasMore(Boolean(res.data.meta?.hasMore));
+        const nextTotal = res.data.meta?.total ?? 0;
+        const nextHasMore = Boolean(res.data.meta?.hasMore);
+        setTotal(nextTotal);
+        setHasMore(nextHasMore);
+        setPageData(cacheKey, { tasks: res.data.data || [], total: nextTotal, hasMore: nextHasMore });
         setExpanded({});
       } catch {
         if (id === requestId.current) setError("Failed to load tasks.");
@@ -240,14 +246,17 @@ export default function TasksPage() {
       }
     }, FILTER_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [buildParams]);
+  }, [buildParams, cacheKey]);
 
   const reload = async () => {
     try {
       const res = await api.get("/tasks", { params: buildParams(0) });
       setTasks(res.data.data || []);
-      setTotal(res.data.meta?.total ?? 0);
-      setHasMore(Boolean(res.data.meta?.hasMore));
+      const nextTotal = res.data.meta?.total ?? 0;
+      const nextHasMore = Boolean(res.data.meta?.hasMore);
+      setTotal(nextTotal);
+      setHasMore(nextHasMore);
+      setPageData(cacheKey, { tasks: res.data.data || [], total: nextTotal, hasMore: nextHasMore });
       setExpanded({});
     } catch {
       setError("Failed to load tasks.");
@@ -258,8 +267,11 @@ export default function TasksPage() {
     setLoadingMore(true);
     try {
       const res = await api.get("/tasks", { params: buildParams(tasks.length) });
-      setTasks((prev) => [...prev, ...(res.data.data || [])]);
-      setHasMore(Boolean(res.data.meta?.hasMore));
+      const loadedTasks = [...tasks, ...(res.data.data || [])];
+      const nextHasMore = Boolean(res.data.meta?.hasMore);
+      setTasks(loadedTasks);
+      setHasMore(nextHasMore);
+      setPageData(cacheKey, { tasks: loadedTasks, total, hasMore: nextHasMore });
     } catch {
       toast.error("Failed to load more tasks.");
     } finally {
@@ -472,12 +484,12 @@ export default function TasksPage() {
               </div>
             </div>
 
-            {loading ? (
+            {loading && rows.length === 0 && !cachedData ? (
               <p className="text-muted text-center py-6">Loading tasks...</p>
             ) : rows.length === 0 ? (
               <p className="text-muted text-center py-6">No tasks found matching your filters.</p>
             ) : (
-              <ul className={viewMode === "grid" ? "tasks-grid" : "flex flex-col gap-4"}>
+              <ul className={viewMode === "grid" ? "tasks-grid" : "tasks-list"}>
                 {rows.map((task) => {
                   const isSeries = task.seriesId != null;
                   const info = task.seriesInfo;

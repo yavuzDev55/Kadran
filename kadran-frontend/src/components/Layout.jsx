@@ -45,6 +45,8 @@ const NAV_ITEMS = [
   { to: "/tasks", label: "Tasks", icon: "tasks" },
 ];
 
+const LAST_MAIN_ROUTE_KEY = "kadran_last_main_route";
+
 export default function Layout() {
   const { user, logout, loading: authLoading, authError } = useAuth();
   const location = useLocation();
@@ -58,6 +60,15 @@ export default function Layout() {
   const authenticatedUser = !authLoading && !authError && user;
   // Sign-in and register are full-screen pages (reference): no app bar, no centered column.
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
+
+  useEffect(() => {
+    if (!["/", "/calendar", "/tasks"].includes(location.pathname)) return;
+    try {
+      sessionStorage.setItem(LAST_MAIN_ROUTE_KEY, `${location.pathname}${location.search}`);
+    } catch {
+      // The current route still works when session storage is unavailable.
+    }
+  }, [location.pathname, location.search]);
 
   // The profile menu closes on outside press and Escape (focus returns to its button).
   useEffect(() => {

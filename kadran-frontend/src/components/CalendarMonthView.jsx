@@ -5,6 +5,8 @@
 import { useState } from "react";
 import CalendarEventCard from "./CalendarEventCard";
 import CalendarSpanBar from "./CalendarSpanBar";
+import Modal from "./ui/Modal";
+import Button from "./ui/Button";
 import { placeSpans } from "../utils/calendarUtils";
 import { getWeekDayLabels, parseDate } from "../utils/dateUtils";
 
@@ -18,11 +20,13 @@ export default function CalendarMonthView({
   today,
   onEventClick,
   onToggle,
+  onCreateTask,
   weekStartsOn = "MONDAY",
   timeFormat = "H24",
 }) {
   const dayLabels = getWeekDayLabels(weekStartsOn);
   const [openDays, setOpenDays] = useState(() => new Set());
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const toggleDay = (dateStr) =>
     setOpenDays((prev) => {
@@ -43,6 +47,23 @@ export default function CalendarMonthView({
 
   const weeks = [];
   for (let i = 0; i < monthDays.length; i += 7) weeks.push(monthDays.slice(i, i + 7));
+  const selectedEvents = selectedDate ? eventsByDate[selectedDate] || [] : [];
+  const selectedSpans = selectedDate
+    ? spans.filter((span) => span.start <= selectedDate && span.end >= selectedDate)
+    : [];
+  const selectedLabel = selectedDate
+    ? new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(parseDate(selectedDate))
+    : "";
+  const handleEventClick = (event) => {
+    setSelectedDate(null);
+    onEventClick?.(event);
+  };
 
   return (
     <div className="calendar-cork flex flex-col w-full bg-surface border border-border/20 rounded-lg overflow-hidden">
@@ -91,7 +112,14 @@ export default function CalendarMonthView({
                         isToday ? "text-accent font-bold" : inMonth ? "text-muted" : "text-muted/50"
                       }`}
                     >
-                      {parseDate(dateStr).getUTCDate()}
+                      <button
+                        type="button"
+                        aria-label={`Show events for ${dateStr}`}
+                        onClick={() => setSelectedDate(dateStr)}
+                        className="rounded px-1 hover:bg-accent/10 focus-visible:outline"
+                      >
+                        {parseDate(dateStr).getUTCDate()}
+                      </button>
                     </div>
                   );
                 })}
@@ -101,7 +129,7 @@ export default function CalendarMonthView({
               {rowCount > 0 && (
                 <div className="grid grid-cols-7 auto-rows-[20px] gap-y-0.5 py-0.5">
                   {bars.map((span) => (
-                    <CalendarSpanBar key={span.id} span={span} onClick={onEventClick} />
+                    <CalendarSpanBar key={span.id} span={span} onClick={handleEventClick} />
                   ))}
                 </div>
               )}
@@ -124,7 +152,7 @@ export default function CalendarMonthView({
                         <CalendarEventCard
                           key={event.id}
                           event={event}
-                          onClick={onEventClick}
+                          onClick={handleEventClick}
                           onToggle={onToggle}
                           timeFormat={timeFormat}
                           variant="compact"
@@ -147,6 +175,56 @@ export default function CalendarMonthView({
           </div>
         );
       })}
+
+      <Modal
+        open={selectedDate !== null}
+        title={selectedLabel}
+        description="Events scheduled for this day."
+        onClose={() => setSelectedDate(null)}
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button onClick={() => setSelectedDate(null)}>Close</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!selectedDate) return;
+                onCreateTask?.(selectedDate);
+                setSelectedDate(null);
+              }}
+            >
+              + Add custom timed task
+            </Button>
+          </div>
+        }
+      >
+        {selectedEvents.length === 0 && selectedSpans.length === 0 ? (
+          <p className="text-sm text-muted">No events scheduled.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {selectedSpans.map((span) => (
+              <button
+                type="button"
+                key={span.id}
+                onClick={() => handleEventClick(span)}
+                className="flex items-center justify-between gap-3 rounded border border-border/20 bg-surface-muted px-3 py-2 text-left text-sm hover:bg-accent/10"
+              >
+                <span className="font-medium">{span.title}</span>
+                <span className="shrink-0 text-xs text-muted">{span.start} – {span.end}</span>
+              </button>
+            ))}
+            {selectedEvents.map((event) => (
+              <CalendarEventCard
+                key={event.id}
+                event={event}
+                onClick={handleEventClick}
+                onToggle={onToggle}
+                timeFormat={timeFormat}
+                variant="compact"
+              />
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

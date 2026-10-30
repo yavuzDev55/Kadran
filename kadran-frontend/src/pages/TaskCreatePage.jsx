@@ -29,6 +29,7 @@ import {
 } from "../utils/taskRules";
 
 const DEFAULT_DEADLINE_TIME = "23:59";
+const LAST_MAIN_ROUTE_KEY = "kadran_last_main_route";
 const isValidDate = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
   return formatDate(parseDate(value)) === value;
@@ -43,8 +44,22 @@ const createInitialForm = (today, searchParams) => {
   const date = searchParams.get("date");
   const startTime = searchParams.get("startTime");
   const endTime = searchParams.get("endTime");
-  const initial = emptyForm("COURSE", isValidDate(date) ? date : today);
-  if (!isValidTime(startTime)) return initial;
+  const requestedType = searchParams.get("type");
+  const type = TASK_RULES[requestedType] ? requestedType : "COURSE";
+  const initial = emptyForm(type, isValidDate(date) ? date : today);
+  const requestedTimeType = searchParams.get("timeType");
+  const timeType = TASK_RULES[type].timeTypes.includes(requestedTimeType)
+    ? requestedTimeType
+    : initial.timeType;
+  const rangeStartDate = searchParams.get("rangeStartDate");
+  const rangeEndDate = searchParams.get("rangeEndDate");
+  const withOverrides = {
+    ...initial,
+    timeType,
+    rangeStartDate: isValidDate(rangeStartDate) ? rangeStartDate : initial.rangeStartDate,
+    rangeEndDate: isValidDate(rangeEndDate) ? rangeEndDate : initial.rangeEndDate,
+  };
+  if (!isValidTime(startTime)) return withOverrides;
 
   const startMinutes = startTime.split(":").reduce((total, part) => total * 60 + Number(part), 0);
   const suggestedEnd = Math.min(startMinutes + 60, 23 * 60 + 59);
@@ -53,7 +68,7 @@ const createInitialForm = (today, searchParams) => {
     : null;
   const endMinutes = parsedEnd !== null && parsedEnd > startMinutes ? parsedEnd : suggestedEnd;
   return {
-    ...initial,
+    ...withOverrides,
     startTime,
     endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
   };
@@ -380,7 +395,18 @@ export default function TaskCreatePage() {
       else if (mode === "edit-single") await submitEditSingle();
       else if (mode === "edit-occurrence") await submitEditOccurrence();
       else await submitEditSeries();
-      navigate("/");
+      let returnTo = "/";
+      try {
+        const lastRoute = sessionStorage.getItem(LAST_MAIN_ROUTE_KEY);
+        if (lastRoute && ["/", "/calendar", "/tasks"].some((route) =>
+          lastRoute === route || lastRoute.startsWith(`${route}?`)
+        )) {
+          returnTo = lastRoute;
+        }
+      } catch {
+        // Fall back to the dashboard when session storage is unavailable.
+      }
+      navigate(returnTo);
     } catch (err) {
       setError(err.response ? describeError(err) : err.message);
     } finally {

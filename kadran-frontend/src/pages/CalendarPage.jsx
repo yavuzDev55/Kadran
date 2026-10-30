@@ -26,6 +26,7 @@ import {
   startOfWeek,
 } from "../utils/dateUtils";
 import { DEFAULT_FILTERS } from "../utils/filters";
+import { getPageData, setPageData } from "../utils/pageDataCache";
 
 const VIEW_STORAGE_KEY = "kadran_calendar_view";
 const COMPACT_HOURS_STORAGE_KEY = "kadran_calendar_compact_hours";
@@ -122,16 +123,22 @@ export default function CalendarPage() {
   const viewEnd = view === "week" ? weekDays[6] : monthDays[monthDays.length - 1];
 
   // ── Data ──
-  // The loaded tasks remember which range they belong to; "loading" is simply "the data on
-  // screen is for another range" (so nothing sets state synchronously inside the effect).
   const [reloadTick, setReloadTick] = useState(0);
-  const rangeKey = `${viewStart}|${viewEnd}|${reloadTick}`;
-  const [data, setData] = useState({ key: null, tasks: [] });
-  const tasks = data.tasks;
+  const cacheKey = `calendar:${user?.id || "anonymous"}:${viewStart}|${viewEnd}`;
+  const rangeKey = `${user?.id || "anonymous"}|${viewStart}|${viewEnd}|${reloadTick}`;
+  const [data, setData] = useState(() => ({
+    key: getPageData(cacheKey) ? rangeKey : null,
+    tasks: getPageData(cacheKey) || [],
+  }));
+  const tasks = data.key === rangeKey ? data.tasks : getPageData(cacheKey) || data.tasks;
   const loading = data.key !== rangeKey;
 
-  const setTasks = (updater) =>
-    setData((prev) => ({ ...prev, tasks: typeof updater === "function" ? updater(prev.tasks) : updater }));
+  const setTasks = (updater) => {
+    const currentTasks = data.key === rangeKey ? data.tasks : getPageData(cacheKey) || data.tasks;
+    const nextTasks = typeof updater === "function" ? updater(currentTasks) : updater;
+    setPageData(cacheKey, nextTasks);
+    setData({ key: rangeKey, tasks: nextTasks });
+  };
   const reloadTasks = () => setReloadTick((tick) => tick + 1);
 
   useEffect(() => {
@@ -141,11 +148,15 @@ export default function CalendarPage() {
         const response = await api.get("/tasks", {
           params: { from: viewStart, to: viewEnd, limit: 500, showCompleted: true },
         });
-        if (!cancelled) setData({ key: rangeKey, tasks: response.data.data || [] });
+        if (!cancelled) {
+          const nextTasks = response.data.data || [];
+          setPageData(cacheKey, nextTasks);
+          setData({ key: rangeKey, tasks: nextTasks });
+        }
       } catch {
         if (!cancelled) {
           toast.error("Failed to load tasks");
-          setData({ key: rangeKey, tasks: [] });
+          setData({ key: rangeKey, tasks: getPageData(cacheKey) || [] });
         }
       }
     };
@@ -153,7 +164,7 @@ export default function CalendarPage() {
     return () => {
       cancelled = true;
     };
-  }, [viewStart, viewEnd, rangeKey]);
+  }, [viewStart, viewEnd, rangeKey, cacheKey]);
 
   // ── Actions ──
   const patchTask = (taskId, patch) => {
@@ -246,8 +257,22 @@ export default function CalendarPage() {
   const handlePrevious = () => setAnchor((a) => (view === "week" ? addDays(a, -7) : shiftMonth(a, -1)));
   const handleNext = () => setAnchor((a) => (view === "week" ? addDays(a, 7) : shiftMonth(a, 1)));
   const handleGoToToday = () => setAnchor(today);
-  const handleCreateTask = (date, startTime, endTime) => {
-    const params = new URLSearchParams({ date, startTime, endTime });
+  const handleCreateTask = (date, startTime, endTime, options = {}) => {
+    const params = new URLSearchParams({ date });
+    if (startTime) params.set("startTime", startTime);
+    if (endTime) params.set("endTime", endTime);
+    if (options.type) params.set("type", options.type);
+    if (options.timeType) params.set("timeType", options.timeType);
+    navigate(`/tasks/new?${params.toString()}`);
+  };
+
+  const handleCreateMultiDayTask = (rangeStartDate, rangeEndDate) => {
+    const params = new URLSearchParams({
+      type: "CUSTOM",
+      timeType: "MULTI_DAY",
+      rangeStartDate,
+      rangeEndDate,
+    });
     navigate(`/tasks/new?${params.toString()}`);
   };
 
@@ -355,9 +380,9 @@ export default function CalendarPage() {
         />
 
         <div className="relative flex-1 min-w-0 w-full">
-          {loading && (
-            <div className="absolute inset-0 bg-surface/75 z-30 flex items-center justify-center animate-pulse text-accent">
-              Loading...
+          {loading && tasks.length === 0 && (
+            <div className="absolute inset-0 z-30 flex items-start justify-center bg-surface/55 pt-8 text-sm text-muted">
+              Loading calendar...
             </div>
           )}
 
@@ -370,6 +395,7 @@ export default function CalendarPage() {
               onEventClick={setSelectedEvent}
               onToggle={handleToggleCompletion}
               onCreateTask={handleCreateTask}
+              onCreateMultiDayTask={handleCreateMultiDayTask}
               startHour={dayStartHour}
               endHour={dayEndHour}
               weekStartsOn={weekStartsOn}
@@ -386,6 +412,7 @@ export default function CalendarPage() {
               today={today}
               onEventClick={setSelectedEvent}
               onToggle={handleToggleCompletion}
+              onCreateTask={(date) => handleCreateTask(date, "", "", { type: "CUSTOM", timeType: "TIMED" })}
               weekStartsOn={weekStartsOn}
               timeFormat={timeFormat}
             />

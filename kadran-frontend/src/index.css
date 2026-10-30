@@ -127,15 +127,29 @@
 }
 
 .tasks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
-  align-items: start;
-  gap: 14px;
+  columns: 290px;
+  column-gap: 14px;
 }
 
 .tasks-grid__card {
   min-width: 0;
-  min-height: 100%;
+  display: inline-block;
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 14px;
+  break-inside: avoid;
+  vertical-align: top;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.tasks-list > li {
+  width: 100%;
 }
 
 .ui-button--icon {
@@ -407,6 +421,15 @@
 
 :root[data-theme="dark"] .calendar-cork {
   background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.36' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.6  0 0 0 0 0.6  0 0 0 0 0.6  0.8 0 0 0 -0.25'/%3E%3C/filter%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.85  0 0 0 0 0.85  0 0 0 0 0.85  3.4 0 0 0 -2.3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23c%29'/%3E%3Crect width='100%25' height='100%25' filter='url%28%23d%29'/%3E%3C/svg%3E");
+}
+
+.calendar-cork {
+  background-image: none;
+  background-color: color-mix(in srgb, rgb(var(--color-surface-muted)) 42%, rgb(var(--color-surface)));
+}
+
+:root[data-theme="dark"] .calendar-cork {
+  background-color: color-mix(in srgb, rgb(var(--color-surface-muted)) 30%, rgb(var(--color-surface)));
 }
 
 .anytime-heading {

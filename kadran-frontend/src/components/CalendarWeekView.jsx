@@ -64,6 +64,7 @@ export default function CalendarWeekView({
   onEventClick,
   onToggle,
   onCreateTask,
+  onCreateMultiDayTask,
   startHour = 8,
   endHour = 22,
   weekStartsOn = "MONDAY",
@@ -84,7 +85,9 @@ export default function CalendarWeekView({
   const activeSelectedDay = weekDays.includes(selectedDay) ? selectedDay : weekDays.includes(today) ? today : weekDays[0];
   const visibleDays = isNarrow ? [activeSelectedDay] : weekDays;
   const gridStyle = { gridTemplateColumns: `50px repeat(${visibleDays.length}, minmax(0, 1fr))` };
+  const allDayGridStyle = { gridTemplateColumns: `50px repeat(${weekDays.length}, minmax(0, 1fr))` };
   const gridMinWidth = isNarrow ? "320px" : "720px";
+  const allDayMinWidth = isNarrow ? "320px" : "720px";
   const startMin = startHour * 60;
   const endMin = Math.max(endHour, startHour + 1) * 60;
   const hours = Array.from({ length: endMin / 60 - startHour }, (_, i) => startHour + i);
@@ -94,9 +97,11 @@ export default function CalendarWeekView({
   );
   const gridHeight = hourHeights.reduce((total, height) => total + height, 0);
   const dragRef = useRef(null);
+  const allDayDragRef = useRef(null);
   const [selection, setSelection] = useState(null);
+  const [allDaySelection, setAllDaySelection] = useState(null);
 
-  const { spans: bars, rowCount } = placeSpans(spans, visibleDays[0], visibleDays[visibleDays.length - 1]);
+  const { spans: bars, rowCount } = placeSpans(spans, weekDays[0], weekDays[6]);
 
   return (
     <div
@@ -157,23 +162,76 @@ export default function CalendarWeekView({
       </div>
 
       {/* All-day strip: multi-day bars */}
-      <div className="grid border-b border-border/20 bg-surface-muted/35 z-10" style={{ ...gridStyle, minWidth: gridMinWidth }}>
+      <div className="grid border-b border-border/20 bg-surface-muted/35 z-10" style={{ ...allDayGridStyle, minWidth: allDayMinWidth }}>
         <div className="border-r border-border/20 flex items-center justify-center overflow-hidden">
           <span className="text-[9px] uppercase tracking-wider text-muted font-semibold -rotate-90 whitespace-nowrap">
             All Day
           </span>
         </div>
-        <div className="relative min-h-[32px]" style={{ gridColumn: `span ${visibleDays.length}` }}>
-          <div className="absolute inset-0 grid pointer-events-none" style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
-            {visibleDays.map((dateStr) => (
+        <div
+          className="relative min-h-[32px] touch-pan-y"
+          title="Press and drag across days to create a multi-day task"
+          aria-label="All-day schedule. Press and drag across days to create a multi-day task."
+          style={{ gridColumn: `span ${weekDays.length}` }}
+          onPointerDown={(event) => {
+            if (!onCreateMultiDayTask || event.button > 0 || event.target.closest(".kadran-task-span")) return;
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            const dayIndex = Math.max(
+              0,
+              Math.min(weekDays.length - 1, Math.floor(((event.clientX - rect.left) / rect.width) * weekDays.length))
+            );
+            allDayDragRef.current = { pointerId: event.pointerId, start: dayIndex, end: dayIndex };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setAllDaySelection({ start: dayIndex, end: dayIndex });
+          }}
+          onPointerMove={(event) => {
+            if (allDayDragRef.current?.pointerId !== event.pointerId) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const dayIndex = Math.max(
+              0,
+              Math.min(weekDays.length - 1, Math.floor(((event.clientX - rect.left) / rect.width) * weekDays.length))
+            );
+            allDayDragRef.current.end = dayIndex;
+            setAllDaySelection({ ...allDayDragRef.current });
+          }}
+          onPointerUp={(event) => {
+            if (allDayDragRef.current?.pointerId !== event.pointerId) return;
+            const drag = allDayDragRef.current;
+            const first = Math.min(drag.start, drag.end);
+            const last = Math.max(drag.start, drag.end);
+            allDayDragRef.current = null;
+            setAllDaySelection(null);
+            if (first !== last) onCreateMultiDayTask(weekDays[first], weekDays[last]);
+          }}
+          onPointerCancel={() => {
+            allDayDragRef.current = null;
+            setAllDaySelection(null);
+          }}
+        >
+          <div className="absolute inset-0 grid pointer-events-none" style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(0, 1fr))` }}>
+            {weekDays.map((dateStr) => (
               <div key={`allday-bg-${dateStr}`} className="border-r border-border/20 last:border-r-0" />
             ))}
           </div>
-          <div className="relative grid auto-rows-[20px] gap-y-1 py-1.5" style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))` }}>
+          {allDaySelection && (
+            <div
+              className="pointer-events-none absolute inset-0 z-[1] grid"
+              style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(0, 1fr))` }}
+            >
+              <div
+                className="my-1 rounded border border-accent/70 bg-accent/15"
+                style={{
+                  gridColumn: `${Math.min(allDaySelection.start, allDaySelection.end) + 1} / ${Math.max(allDaySelection.start, allDaySelection.end) + 2}`,
+                }}
+              />
+            </div>
+          )}
+          <div className="relative grid auto-rows-[20px] gap-y-1 py-1.5" style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(0, 1fr))` }}>
             {bars.map((span) => (
               <CalendarSpanBar key={span.id} span={span} onClick={onEventClick} />
             ))}
-            {rowCount === 0 && <div className="h-5" style={{ gridColumn: `span ${visibleDays.length}` }} />}
+            {rowCount === 0 && <div className="h-5" style={{ gridColumn: `span ${weekDays.length}` }} />}
           </div>
         </div>
       </div>

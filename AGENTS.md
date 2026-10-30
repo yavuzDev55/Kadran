@@ -33,5 +33,13 @@ backend; database migrations are managed with Prisma.
 - Enforce authentication and user ownership in backend operations.
 - Keep task rules in `kadran-backend/src/features/task/task.rules.js` and
   `kadran-frontend/src/utils/taskRules.js` consistent.
+- Keep previously loaded dashboard, task-list, and calendar data visible while
+  refreshing in the background; scope cached data to the authenticated user.
+- Return from task creation and editing to the last-opened main section
+  (dashboard, calendar, or task list).
+- Preserve the task-list layout behavior: grid cards flow in compact columns
+  without equal-height row gaps, while list rows fill the available width.
+- Keep calendar quick-create flows prefilled with the selected date or
+  multi-day range, and document user-visible calendar changes in `README.md`.
 - Follow the API, setup, and domain documentation in `README.md`; update it
   when user-visible behavior, API contracts, or setup steps change.
